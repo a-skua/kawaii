@@ -8,10 +8,11 @@ export class Kawaii {
 
   constructor(
     path: string,
+    private readonly debug: boolean,
   ) {
     const args = path.split(" ").filter((w) => w.length > 0); // FIXME
     this.filepath = args[0];
-    this.preview1 = new Preview1(args.map((arg) => new Arg(arg)));
+    this.preview1 = new Preview1(args.map((arg) => new Arg(arg)), this.debug);
   }
 
   async init(importMetaUrl: string) {
@@ -34,13 +35,17 @@ export class Kawaii {
       };
     }; // TODO
 
-    this.preview1.__init(instance.exports.memory);
+    this.preview1.init(instance.exports.memory);
     instance.exports._start();
   }
 }
 
-export default async function (path: string, importMetaUrl: string) {
-  const kawaii = new Kawaii(path);
+export default async function (
+  path: string,
+  importMetaUrl: string,
+  debug = false,
+) {
+  const kawaii = new Kawaii(path, debug);
   await kawaii.init(importMetaUrl);
   try {
     await kawaii.run();

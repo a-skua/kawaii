@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "example": "deno run --allow-read example/run.ts example.wasm"
+  }
+}
