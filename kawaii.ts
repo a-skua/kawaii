@@ -12,7 +12,7 @@ export class Kawaii {
   ) {
     const args = path.split(" ").filter((w) => w.length > 0); // FIXME
     this.filepath = args[0];
-    this.preview1 = new Preview1(args.map((arg) => new Arg(arg)), this.debug);
+    this.preview1 = new Preview1(args.map((arg) => new Arg(arg)));
   }
 
   async init(importMetaUrl: string) {
@@ -26,8 +26,22 @@ export class Kawaii {
       throw new Error("wasm module is not initialized");
     }
 
+    const preview1 = this.preview1.importModule();
     const instance = await WebAssembly.instantiate(this.wasmModule, {
-      wasi_snapshot_preview1: this.preview1.importModule(),
+      wasi_snapshot_preview1: this.debug
+        ? Object.keys(preview1).map((key) => ({
+          key,
+          fn: (...args: unknown[]) => {
+            console.debug(`==== ${key}(${args})`);
+            // @ts-ignore debug
+            return preview1[key](...args);
+          },
+        })).reduce((preview1, obj) => {
+          // @ts-ignore debug
+          preview1[obj.key] = obj.fn;
+          return preview1;
+        }, {})
+        : preview1,
     }) as {
       exports: {
         _start: () => void;
