@@ -5,3 +5,8 @@ Deno.test("Arg", () => {
   const arg = new Arg("--help");
   assertEquals(arg.buffer, new TextEncoder().encode("--help\0"));
 });
+
+Deno.test("Arg.toString()", () => {
+  const arg = new Arg("--help");
+  assertEquals(`${arg}`, "--help");
+});

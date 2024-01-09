@@ -1,31 +1,31 @@
 import Preview1, { Arg } from "./preview1.ts";
 
-export class Kawaii {
-  private readonly filepath: string;
+class Kawaii {
   private readonly preview1: Preview1;
 
-  private wasmModule: WebAssembly.Module | undefined;
-
   constructor(
-    path: string,
-    private readonly debug: boolean,
+    private readonly wasmModule: WebAssembly.Module,
+    readonly args: Arg[],
+    private debug: boolean = false,
   ) {
-    const args = path.split(" ").filter((w) => w.length > 0); // FIXME
-    this.filepath = args[0];
-    this.preview1 = new Preview1(args.map((arg) => new Arg(arg)));
+    this.preview1 = new Preview1(args);
   }
 
-  async init(importMetaUrl: string) {
-    this.wasmModule = await WebAssembly.compileStreaming(
-      fetch(new URL(this.filepath, importMetaUrl)),
+  static async new(
+    args: Arg[],
+    importMetaUrl: string,
+    debug = false,
+  ): Promise<Kawaii> {
+    return new Kawaii(
+      await WebAssembly.compileStreaming(
+        fetch(new URL(`${args[0]}`, importMetaUrl)),
+      ),
+      args,
+      debug,
     );
   }
 
   async run() {
-    if (this.wasmModule === undefined) {
-      throw new Error("wasm module is not initialized");
-    }
-
     const preview1 = this.preview1.importModule();
     const instance = await WebAssembly.instantiate(this.wasmModule, {
       wasi_snapshot_preview1: this.debug
@@ -59,8 +59,12 @@ export default async function (
   importMetaUrl: string,
   debug = false,
 ) {
-  const kawaii = new Kawaii(path, debug);
-  await kawaii.init(importMetaUrl);
+  const kawaii = await Kawaii.new(
+    path.split(" ").filter((w) => w.length > 0).map((arg) => new Arg(arg)),
+    importMetaUrl,
+    debug,
+  );
+
   try {
     await kawaii.run();
   } catch (e) {

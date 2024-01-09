@@ -18,6 +18,7 @@ import {
 } from "./functions.ts";
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 export class Arg {
   buffer: Uint8Array;
@@ -25,6 +26,10 @@ export class Arg {
     value: string,
   ) {
     this.buffer = encoder.encode(`${value}\0`);
+  }
+
+  toString() {
+    return decoder.decode(this.buffer.subarray(0, this.buffer.length - 1));
   }
 }
 
