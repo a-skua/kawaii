@@ -1,4 +1,6 @@
-// https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#variant-cases-1
+// errno: Variant
+//
+// Error codes returned by functions. Not all of these error codes are returned by the functions provided by this API; some are used in higher-level library layers, and others are provided merely for alignment with POSIX.
 export enum Errno {
   // success No error occurred. System call completed successfully.
   Success,
@@ -276,7 +278,9 @@ export class Fdstat {
     return buf;
   }
 }
-export type Pointer = number;
+export type Pointer<_> = number;
+
+export type U8 = number;
 
 export type Size = number;
 
@@ -302,3 +306,159 @@ export enum Clockid {
   // thread_cputime_id The CPU-time clock associated with the current thread.
   ThreadCputimeId,
 }
+
+// [buf: Pointer<U8>, buf_len: Size]
+export class Ciovec {
+  readonly size = 8;
+  constructor(readonly buf: Pointer<U8>, readonly len: Size) {}
+  static cast(mem: WebAssembly.Memory, ptr: Pointer<Ciovec>): Ciovec {
+    const data = new DataView(mem.buffer);
+    return new Ciovec(data.getUint32(ptr, true), data.getUint32(ptr + 4, true));
+  }
+}
+
+// userdata: u64
+//
+// User-provided value that may be attached to objects that is retained when extracted from the implementation.
+type Userdata = bigint;
+
+// eventtype: Variant
+//
+// Type of a subscription to an event or its occurrence.
+export enum Eventtype {
+  Clock,
+  FdRead,
+  FdWrite,
+}
+
+// filesize: u64
+//
+// Non-negative file size or length of a region within a file.
+export type Filesize = bigint;
+
+export class Eventrwflags {
+  readonly size = 2;
+  constructor(
+    private readonly flags: number,
+  ) {}
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Eventrwflags>,
+  ): Eventrwflags {
+    const data = new DataView(mem.buffer);
+    return new Eventrwflags(data.getUint16(ptr, true));
+  }
+
+  fdReadwriteHangup(): boolean {
+    return (this.flags & 1) > 0;
+  }
+}
+
+// event_fd_readwrite: Record
+//
+// The contents of an event when type is eventtype::fd_read or eventtype::fd_write.
+export class EventFdReadwrite {
+  readonly size = 16;
+  constructor(
+    readonly nbytes: Filesize,
+    readonly flags: Eventrwflags,
+  ) {}
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<EventFdReadwrite>,
+  ): EventFdReadwrite {
+    const data = new DataView(mem.buffer);
+    return new EventFdReadwrite(
+      data.getBigUint64(ptr, true),
+      Eventrwflags.cast(mem, ptr + 8),
+    );
+  }
+}
+
+export class Subclockflags {
+  readonly size = 2;
+  constructor(
+    private readonly flags: number,
+  ) {}
+
+  subscriptionClockAbstime(): boolean {
+    return (this.flags & 1) > 0;
+  }
+}
+
+// subscription_clock: Record
+//
+// The contents of a subscription when type is eventtype::clock.
+export class SubscriptionClock {
+  readonly size = 32;
+  constructor(
+    readonly id: Clockid,
+    readonly timeout: Timestamp,
+    readonly precision: Timestamp,
+    readonly flags: Subclockflags,
+  ) {}
+}
+
+// subscription_fd_readwrite: Record
+//
+// The contents of a subscription when type is type is eventtype::fd_read or eventtype::fd_write.
+export class SubscriptionFdReadwrite {
+  readonly size = 4;
+  constructor(
+    readonly fd: Fd,
+  ) {}
+}
+
+// subscription: Record
+//
+// Subscription to an event.
+export class SubscriptionU {
+  readonly size = 40;
+  constructor(
+    readonly type: Eventtype,
+    readonly content: SubscriptionClock | SubscriptionFdReadwrite,
+  ) {}
+}
+
+// Subscription to an event.
+export class Subscription {
+  readonly size = 48;
+  constructor(
+    readonly userdata: Userdata,
+    readonly u: SubscriptionU,
+  ) {}
+}
+
+// event: Record
+//
+// An event that occurred.
+export class Event {
+  readonly size = 32;
+  constructor(
+    readonly userdata: Userdata,
+    readonly error: Errno,
+    readonly type: Eventtype,
+    readonly fdReadwrite: EventFdReadwrite,
+  ) {}
+
+  static cast(mem: WebAssembly.Memory, ptr: Pointer<Event>): Event {
+    const data = new DataView(mem.buffer);
+    return new Event(
+      data.getBigUint64(ptr, true),
+      data.getUint16(ptr + 8, true),
+      data.getUint8(ptr + 10),
+      EventFdReadwrite.cast(mem, ptr + 16),
+    );
+  }
+}
+
+// TODO
+export class Filestat {}
+
+// TODO
+export class Iovec {}
+
+// TODO
+export class Prestat {}

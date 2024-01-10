@@ -1,6 +1,15 @@
-import runtime from "../kawaii.ts";
+import { Preview1 } from "../kawaii.ts";
 
-const debug = true;
+const { instance } = await WebAssembly.instantiateStreaming(
+  fetch(new URL(Deno.args[0], import.meta.url)),
+  { wasi_snapshot_preview1: Preview1.Module },
+);
+const { _start, memory } = instance.exports as {
+  _start: () => void;
+  memory: WebAssembly.Memory;
+};
 
-console.debug(Deno.env.toObject());
-runtime(Deno.args.join(" "), import.meta.url, debug);
+Preview1.init({
+  memory,
+});
+_start();
