@@ -178,104 +178,266 @@ export enum Filetype {
   SymbolicLink,
 }
 
-// 16 bits
-export type Fdflags = number;
-
-export const Fdflags = {
-  // append: bool Append mode: Data written to the file is always appended to the file's end.
-  Append: 1 << 0,
-  // dsync: bool Write according to synchronized I/O data integrity completion. Only the data stored in the file is synchronized.
-  Dsync: 1 << 1,
-  // nonblock: bool Non-blocking mode.
-  Nonblock: 1 << 2,
-  // rsync: bool Synchronized read I/O operations.
-  Rsync: 1 << 3,
-  // sync: bool Write according to synchronized I/O file integrity completion. In addition to synchronizing the data stored in the file, the implementation may also synchronously update the file's metadata.
-  Sync: 1 << 4,
-};
-
-// 64 bits
-export type Rights = bigint;
-
-export const Rights = {
-  // fd_datasync: bool The right to invoke fd_datasync. If path_open is set, includes the right to invoke path_open with fdflags::dsync.
-  FdDataSync: 1n << 0n,
-  // fd_read: bool The right to invoke fd_read and sock_recv. If rights::fd_seek is set, includes the right to invoke fd_pread.
-  FdRead: 1n << 1n,
-  // fd_seek: bool The right to invoke fd_seek. This flag implies rights::fd_tell.
-  FdSeek: 1n << 2n,
-  // fd_fdstat_set_flags: bool The right to invoke fd_fdstat_set_flags.
-  FdFdstatSetFlags: 1n << 3n,
-  // fd_sync: bool The right to invoke fd_sync. If path_open is set, includes the right to invoke path_open with fdflags::rsync and fdflags::dsync.
-  FdSync: 1n << 4n,
-  // fd_tell: bool The right to invoke fd_seek in such a way that the file offset remains unaltered (i.e., whence::cur with offset zero), or to invoke fd_tell.
-  FdTell: 1n << 5n,
-  // fd_write: bool The right to invoke fd_write and sock_send. If rights::fd_seek is set, includes the right to invoke fd_pwrite.
-  FdWrite: 1n << 6n,
-  // fd_advise: bool The right to invoke fd_advise.
-  FdAdvise: 1n << 7n,
-  // fd_allocate: bool The right to invoke fd_allocate.
-  FdAllocate: 1n << 8n,
-  // path_create_directory: bool The right to invoke path_create_directory.
-  PathCreateDirectory: 1n << 9n,
-  // path_create_file: bool If path_open is set, the right to invoke path_open with oflags::creat.
-  PathCreateFile: 1n << 10n,
-  // path_link_source: bool The right to invoke path_link with the file descriptor as the source directory.
-  PathLinkSource: 1n << 11n,
-  // path_link_target: bool The right to invoke path_link with the file descriptor as the target directory.
-  PathLinkTarget: 1n << 12n,
-  // path_open: bool The right to invoke path_open.
-  PathOpen: 1n << 13n,
-  // fd_readdir: bool The right to invoke fd_readdir.
-  FdReaddir: 1n << 14n,
-  // path_readlink: bool The right to invoke path_readlink.
-  PathReadlink: 1n << 15n,
-  // path_rename_source: bool The right to invoke path_rename with the file descriptor as the source directory.
-  PathRenameSource: 1n << 16n,
-  // path_rename_target: bool The right to invoke path_rename with the file descriptor as the target directory.
-  PathRenameTarget: 1n << 17n,
-  // path_filestat_get: bool The right to invoke path_filestat_get.
-  PathFilestatGet: 1n << 18n,
-  // path_filestat_set_size: bool The right to change a file's size. If path_open is set, includes the right to invoke path_open with oflags::trunc. Note: there is no function named path_filestat_set_size. This follows POSIX design, which only has ftruncate and does not provide ftruncateat. While such function would be desirable from the API design perspective, there are virtually no use cases for it since no code written for POSIX systems would use it. Moreover, implementing it would require multiple syscalls, leading to inferior performance.
-  PathFilestatSetSize: 1n << 19n,
-  // path_filestat_set_times: bool The right to invoke path_filestat_set_times.
-  PathFilestatSetTimes: 1n << 20n,
-  // fd_filestat_get: bool The right to invoke fd_filestat_get.
-  FdFilestatGet: 1n << 21n,
-  // fd_filestat_set_size: bool The right to invoke fd_filestat_set_size.
-  FdFilestatSetSize: 1n << 22n,
-  // fd_filestat_set_times: bool The right to invoke fd_filestat_set_times.
-  FdFilestatSetTimes: 1n << 23n,
-  // path_symlink: bool The right to invoke path_symlink.
-  PathSymlink: 1n << 24n,
-  // path_remove_directory: bool The right to invoke path_remove_directory.
-  PathRemoveDirectory: 1n << 25n,
-  // path_unlink_file: bool The right to invoke path_unlink_file.
-  PathUnlinkFile: 1n << 26n,
-  // poll_fd_readwrite: bool If rights::fd_read is set, includes the right to invoke poll_oneoff to subscribe to eventtype::fd_read. If rights::fd_write is set, includes the right to invoke poll_oneoff to subscribe to eventtype::fd_write.
-  PollFdReadWrite: 1n << 27n,
-  // sock_shutdown: bool The right to invoke sock_shutdown.
-  SockShutdown: 1n << 28n,
-  // sock_accept: bool The right to invoke sock_accept.
-  SockAccept: 1n << 29n,
-};
-
-export class Fdstat {
+// fdflags: Record
+//
+// File descriptor flags.
+export class Fdflags {
+  readonly size = 2;
   constructor(
-    readonly fs_filetype: Filetype,
-    readonly fs_flags: Fdflags,
-    readonly fs_rights_base: Rights,
-    readonly fs_rights_inheriting: Rights,
+    private readonly flags: number,
   ) {}
 
-  toBuffer(): Uint8Array {
-    const buf = new Uint8Array(24);
-    const data = new DataView(buf.buffer);
-    data.setUint8(0, this.fs_filetype);
-    data.setUint16(2, this.fs_flags, true);
-    data.setBigUint64(8, this.fs_rights_base, true);
-    data.setBigUint64(16, this.fs_rights_inheriting, true);
-    return buf;
+  static cast(mem: WebAssembly.Memory, ptr: Pointer<Fdflags>): Fdflags {
+    const data = new DataView(mem.buffer);
+    return new Fdflags(
+      data.getUint16(ptr, true),
+    );
+  }
+
+  static readonly append = 1;
+  static readonly dsync = 2;
+  static readonly nonblock = 4;
+  static readonly rsync = 8;
+  static readonly sync = 16;
+
+  // Append mode: Data written to the file is always appended to the file's end.
+  get append(): boolean {
+    return (this.flags & Fdflags.append) > 0;
+  }
+
+  // Write according to synchronized I/O data integrity completion. Only the data stored in the file is synchronized.
+  get dsync(): boolean {
+    return (this.flags & Fdflags.dsync) > 0;
+  }
+
+  // Non-blocking mode
+  get nonblock(): boolean {
+    return (this.flags & Fdflags.nonblock) > 0;
+  }
+
+  // Synchronized read I/O operations.
+  get rsync(): boolean {
+    return (this.flags & Fdflags.rsync) > 0;
+  }
+
+  // Write according to synchronized I/O file integrity completion. In addition to synchronizing the data stored in the file, the implementation may also synchronously update the file's metadata.
+  get sync(): boolean {
+    return (this.flags & Fdflags.sync) > 0;
+  }
+}
+
+// 64 bits
+
+export class Rights {
+  readonly size = 8;
+  constructor(
+    private readonly flags: bigint,
+  ) {}
+
+  static readonly fdDatasync = 1n << 0n;
+  static readonly fdRead = 1n << 1n;
+  static readonly fdSeek = 1n << 2n;
+  static readonly fdFdstatSetFlags = 1n << 3n;
+  static readonly fdSync = 1n << 4n;
+  static readonly fdTell = 1n << 5n;
+  static readonly fdWrite = 1n << 6n;
+  static readonly fdAdvise = 1n << 7n;
+  static readonly fdAllocate = 1n << 8n;
+  static readonly pathCreateDirectory = 1n << 9n;
+  static readonly pathCreateFile = 1n << 10n;
+  static readonly pathLinkSource = 1n << 11n;
+  static readonly pathLinkTarget = 1n << 12n;
+  static readonly pathOpen = 1n << 13n;
+  static readonly fdReaddir = 1n << 14n;
+  static readonly pathReadlink = 1n << 15n;
+  static readonly pathRenameSource = 1n << 16n;
+  static readonly pathRenameTarget = 1n << 17n;
+  static readonly pathFilestatGet = 1n << 18n;
+  static readonly pathFilestatSetSize = 1n << 19n;
+  static readonly pathFilestatSetTimes = 1n << 20n;
+  static readonly fdFilestatGet = 1n << 21n;
+  static readonly fdFilestatSetSize = 1n << 22n;
+  static readonly fdFilestatSetTimes = 1n << 23n;
+  static readonly pathSymlink = 1n << 24n;
+  static readonly pathRemoveDirectory = 1n << 25n;
+  static readonly pathUnlinkFile = 1n << 26n;
+  static readonly pollFdReadwrite = 1n << 27n;
+  static readonly sockShutdown = 1n << 28n;
+  static readonly sockAccept = 1n << 29n;
+
+  static cast(mem: WebAssembly.Memory, ptr: Pointer<Rights>): Rights {
+    const data = new DataView(mem.buffer);
+    return new Rights(data.getBigUint64(ptr, true));
+  }
+
+  // The right to invoke fd_datasync. If path_open is set, includes the right to invoke path_open with fdflags::dsync.
+  get fdDatasync(): boolean {
+    return (this.flags & Rights.fdDatasync) > 0n;
+  }
+
+  // The right to invoke fd_read and sock_recv. If rights::fd_seek is set, includes the right to invoke fd_pread.
+  get fdRead(): boolean {
+    return (this.flags & Rights.fdRead) > 0n;
+  }
+
+  // The right to invoke fd_seek. This flag implies rights::fd_tell.
+  get fdSeek(): boolean {
+    return (this.flags & Rights.fdSeek) > 0n;
+  }
+
+  // The right to invoke fd_fdstat_set_flags.
+  get fdFdstatSetFlags(): boolean {
+    return (this.flags & Rights.fdFdstatSetFlags) > 0n;
+  }
+
+  // The right to invoke fd_sync. If path_open is set, includes the right to invoke path_open with fdflags::rsync and fdflags::dsync.
+  get fdSync(): boolean {
+    return (this.flags & Rights.fdSync) > 0n;
+  }
+
+  // The right to invoke fd_seek in such a way that the file offset remains unaltered (i.e., whence::cur with offset zero), or to invoke fd_tell.
+  get fdTell(): boolean {
+    return (this.flags & Rights.fdTell) > 0n;
+  }
+
+  // The right to invoke fd_write and sock_send. If rights::fd_seek is set, includes the right to invoke fd_pwrite.
+  get fdWrite(): boolean {
+    return (this.flags & Rights.fdWrite) > 0n;
+  }
+
+  // The right to invoke fd_advise.
+  get fdAdvise(): boolean {
+    return (this.flags & Rights.fdAdvise) > 0n;
+  }
+
+  // The right to invoke fd_allocate.
+  get fdAllocate(): boolean {
+    return (this.flags & Rights.fdAllocate) > 0n;
+  }
+
+  // The right to invoke path_create_directory.
+  get pathCreateDirectory(): boolean {
+    return (this.flags & Rights.pathCreateDirectory) > 0n;
+  }
+
+  // If path_open is set, the right to invoke path_open with oflags::creat.
+  get pathCreateFile(): boolean {
+    return (this.flags & Rights.pathCreateFile) > 0n;
+  }
+
+  // The right to invoke path_link with the file descriptor as the source directory.
+  get pathLinkSource(): boolean {
+    return (this.flags & Rights.pathLinkSource) > 0n;
+  }
+
+  // The right to invoke path_link with the file descriptor as the target directory.
+  get pathLinkTarget(): boolean {
+    return (this.flags & Rights.pathLinkTarget) > 0n;
+  }
+
+  // The right to invoke path_open.
+  get pathOpen(): boolean {
+    return (this.flags & Rights.pathOpen) > 0n;
+  }
+
+  // The right to invoke fd_readdir.
+  get fdReaddir(): boolean {
+    return (this.flags & Rights.fdReaddir) > 0n;
+  }
+
+  // The right to invoke path_readlink.
+  get pathReadlink(): boolean {
+    return (this.flags & Rights.pathReadlink) > 0n;
+  }
+
+  // The right to invoke path_rename with the file descriptor as the source directory.
+  get pathRenameSource(): boolean {
+    return (this.flags & Rights.pathRenameSource) > 0n;
+  }
+
+  // The right to invoke path_rename with the file descriptor as the target directory.
+  get pathRenameTarget(): boolean {
+    return (this.flags & Rights.pathRenameTarget) > 0n;
+  }
+
+  // The right to invoke path_filestat_get.
+  get pathFilestatGet(): boolean {
+    return (this.flags & Rights.pathFilestatGet) > 0n;
+  }
+
+  // The right to change a file's size. If path_open is set, includes the right to invoke path_open with oflags::trunc. Note: there is no function named path_filestat_set_size. This follows POSIX design, which only has ftruncate and does not provide ftruncateat. While such function would be desirable from the API design perspective, there are virtually no use cases for it since no code written for POSIX systems would use it. Moreover, implementing it would require multiple syscalls, leading to inferior performance.
+  get pathFilestatSetSize(): boolean {
+    return (this.flags & Rights.pathFilestatSetSize) > 0n;
+  }
+
+  // The right to invoke path_filestat_set_times.
+  get pathFilestatSetTimes(): boolean {
+    return (this.flags & Rights.pathFilestatSetTimes) > 0n;
+  }
+
+  // The right to invoke fd_filestat_get.
+  get fdFilestatGet(): boolean {
+    return (this.flags & Rights.fdFilestatGet) > 0n;
+  }
+
+  // The right to invoke fd_filestat_set_size.
+  get fdFilestatSetSize(): boolean {
+    return (this.flags & Rights.fdFilestatSetSize) > 0n;
+  }
+
+  // The right to invoke fd_filestat_set_times.
+  get fdFilestatSetTimes(): boolean {
+    return (this.flags & Rights.fdFilestatSetTimes) > 0n;
+  }
+
+  // The right to invoke path_symlink.
+  get pathSymlink(): boolean {
+    return (this.flags & Rights.pathSymlink) > 0n;
+  }
+
+  // The right to invoke path_remove_directory.
+  get pathRemoveDirectory(): boolean {
+    return (this.flags & Rights.pathRemoveDirectory) > 0n;
+  }
+
+  // The right to invoke path_unlink_file.
+  get pathUnlinkFile(): boolean {
+    return (this.flags & Rights.pathUnlinkFile) > 0n;
+  }
+
+  // If rights::fd_read is set, includes the right to invoke poll_oneoff to subscribe to eventtype::fd_read. If rights::fd_write is set, includes the right to invoke poll_oneoff to subscribe to eventtype::fd_write.
+  get pollFdReadwrite(): boolean {
+    return (this.flags & Rights.pollFdReadwrite) > 0n;
+  }
+
+  // The right to invoke sock_shutdown.
+  get sockShutdown(): boolean {
+    return (this.flags & Rights.sockShutdown) > 0n;
+  }
+
+  // The right to invoke sock_accept.
+  get sockAccept(): boolean {
+    return (this.flags & Rights.sockAccept) > 0n;
+  }
+}
+
+export class Fdstat {
+  readonly size = 24;
+  constructor(
+    readonly fsFiletype: Filetype,
+    readonly fsFlags: Fdflags,
+    readonly fsRightsBase: Rights,
+    readonly fsRightsInheriting: Rights,
+  ) {}
+
+  static cast(mem: WebAssembly.Memory, ptr: Pointer<Fdstat>): Fdstat {
+    const data = new DataView(mem.buffer);
+    return new Fdstat(
+      data.getUint8(ptr),
+      Fdflags.cast(mem, ptr + 2),
+      Rights.cast(mem, ptr + 8),
+      Rights.cast(mem, ptr + 16),
+    );
   }
 }
 export type Pointer<_> = number;
@@ -350,8 +512,10 @@ export class Eventrwflags {
     return new Eventrwflags(data.getUint16(ptr, true));
   }
 
-  fdReadwriteHangup(): boolean {
-    return (this.flags & 1) > 0;
+  static readonly fdReadwriteHangup = 1;
+
+  get fdReadwriteHangup(): boolean {
+    return (this.flags & Eventrwflags.fdReadwriteHangup) > 0;
   }
 }
 

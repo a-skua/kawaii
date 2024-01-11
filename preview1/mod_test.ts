@@ -217,6 +217,12 @@ Deno.test(random_get.name, () => {
   assert(new Uint8Array(memory.buffer, 100, 8).reduce((sum, n) => sum + n) > 0);
 });
 
-Deno.test(poll_oneoff.name, () => {
-  assertEquals(Errno[poll_oneoff(0, 0, 0, 0)], Errno[Errno.Nosys]);
+Deno.test(poll_oneoff.name, async (t) => {
+  await t.step("nsubscriptions is 0", () => {
+    assertEquals(Errno[poll_oneoff(0, 0, 0, 0)], Errno[Errno.Inval]);
+  });
+
+  await t.step("normal", () => {
+    assertEquals(Errno[poll_oneoff(0, 0, 1, 0)], Errno[Errno.Notsup]);
+  });
 });

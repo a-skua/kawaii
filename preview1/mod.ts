@@ -222,10 +222,13 @@ export function random_get(buf: Pointer<U8>, len: Size): Errno {
 export function poll_oneoff(
   _in: Pointer<Subscription>,
   _out: Pointer<Event>,
-  _nsubscriptions: Size,
+  nsubscriptions: Size,
   _result: Pointer<Size>,
 ): Errno {
-  return Errno.Nosys;
+  if (nsubscriptions === 0) {
+    return Errno.Inval;
+  }
+  return Errno.Notsup;
 }
 
 // fd_close(fd: fd) -> Result<(), errno>
