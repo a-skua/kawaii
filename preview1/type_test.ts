@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.204.0/assert/mod.ts";
 import {
+  BigValue,
   Ciovec,
   Data,
   Errno,
@@ -9,6 +10,7 @@ import {
   Eventtype,
   Fdflags,
   Fdstat,
+  Filesize,
   Filetype,
   Pointer,
   Preopentype,
@@ -17,6 +19,7 @@ import {
   Rights,
   Size,
   Userdata,
+  Value,
 } from "./type.ts";
 
 interface DataType {
@@ -45,7 +48,10 @@ Deno.test("ciovec", async (t) => {
     data.setUint32(addOffset(pointer, 4), 16, true);
     assertEquals(
       Ciovec.cast(memory, pointer),
-      new Ciovec(Pointer(8), new Size(16)),
+      new Ciovec({
+        buf: Pointer(8),
+        len: new Size(Value(16)),
+      }),
     );
   });
 
@@ -62,16 +68,19 @@ Deno.test("eventrwflags", async (t) => {
     const data = new DataView(memory.buffer);
     data.setUint16(pointer, 1, true);
 
-    assertEquals(Eventrwflags.cast(memory, pointer), new Eventrwflags(1));
+    assertEquals(
+      Eventrwflags.cast(memory, pointer),
+      new Eventrwflags(Value(1)),
+    );
   });
 
   await t.step("fdReadwriteHangup is true", () => {
-    const flags = new Eventrwflags(1);
+    const flags = new Eventrwflags(Value(1));
     assertEquals(flags.fdReadwriteHangup, true);
   });
 
   await t.step("fdReadwriteHangup is false", () => {
-    const flags = new Eventrwflags(0);
+    const flags = new Eventrwflags(Value(0));
     assertEquals(flags.fdReadwriteHangup, false);
   });
 });
@@ -87,7 +96,10 @@ Deno.test("event_fd_readwrite", async (t) => {
 
     assertEquals(
       EventFdReadwrite.cast(memory, pointer),
-      new EventFdReadwrite(1024n, new Eventrwflags(1)),
+      new EventFdReadwrite(
+        new Filesize(BigValue(1024n)),
+        new Eventrwflags(Value(1)),
+      ),
     );
   });
 
@@ -103,18 +115,21 @@ Deno.test(Event.name, async (t) => {
 
     const data = new DataView(memory.buffer);
     data.setBigUint64(addOffset(pointer, 0), 100n, true);
-    data.setUint16(addOffset(pointer, 8), Errno.Notsup, true);
-    data.setUint8(addOffset(pointer, 10), Eventtype.FdWrite);
+    data.setUint16(addOffset(pointer, 8), Errno.notsup, true);
+    data.setUint8(addOffset(pointer, 10), Eventtype.fd_write);
     data.setBigUint64(addOffset(pointer, 16), 1024n, true);
     data.setUint16(addOffset(pointer, 24), 1, true);
 
     assertEquals(
       Event.cast(memory, pointer),
       new Event(
-        new Userdata(100n),
-        Errno.Notsup,
-        Eventtype.FdWrite,
-        new EventFdReadwrite(1024n, new Eventrwflags(1)),
+        new Userdata(BigValue(100n)),
+        new Errno(Errno.notsup),
+        new Eventtype(Eventtype.fd_write),
+        new EventFdReadwrite(
+          new Filesize(BigValue(1024n)),
+          new Eventrwflags(Value(1)),
+        ),
       ),
     );
   });
@@ -131,7 +146,7 @@ Deno.test("fdflags", async (t) => {
     const data = new DataView(memory.buffer);
 
     data.setUint16(pointer, Fdflags.dsync | Fdflags.rsync, true);
-    assertEquals(Fdflags.cast(memory, pointer), new Fdflags(10));
+    assertEquals(Fdflags.cast(memory, pointer), new Fdflags(Value(10)));
   });
 
   await t.step("store()", () => {
@@ -150,27 +165,27 @@ Deno.test("fdflags", async (t) => {
   });
 
   await t.step("append", () => {
-    const flags = new Fdflags(1 << 0);
+    const flags = new Fdflags(Value(Fdflags.append));
     assertEquals(flags.append, true);
   });
 
   await t.step("dsync", () => {
-    const flags = new Fdflags(1 << 1);
+    const flags = new Fdflags(Value(Fdflags.dsync));
     assertEquals(flags.dsync, true);
   });
 
   await t.step("nonblock", () => {
-    const flags = new Fdflags(1 << 2);
+    const flags = new Fdflags(Value(Fdflags.nonblock));
     assertEquals(flags.nonblock, true);
   });
 
   await t.step("rsync", () => {
-    const flags = new Fdflags(1 << 3);
+    const flags = new Fdflags(Value(Fdflags.rsync));
     assertEquals(flags.rsync, true);
   });
 
   await t.step("sync", () => {
-    const flags = new Fdflags(1 << 4);
+    const flags = new Fdflags(Value(Fdflags.sync));
     assertEquals(flags.sync, true);
   });
 });
@@ -182,7 +197,10 @@ Deno.test("rights", async (t) => {
     const data = new DataView(memory.buffer);
 
     data.setBigUint64(pointer, 1_000_000n, true);
-    assertEquals(Rights.cast(memory, pointer), new Rights(1_000_000n));
+    assertEquals(
+      Rights.cast(memory, pointer),
+      new Rights(BigValue(1_000_000n)),
+    );
   });
 
   await t.step("store()", () => {
@@ -207,152 +225,152 @@ Deno.test("rights", async (t) => {
   });
 
   await t.step("fd_datasync", () => {
-    const flags = new Rights(1n << 0n);
+    const flags = new Rights(Rights.fd_datasync);
     assertEquals(flags.fd_datasync, true);
   });
 
   await t.step("fd_read", () => {
-    const flags = new Rights(1n << 1n);
+    const flags = new Rights(Rights.fd_read);
     assertEquals(flags.fd_read, true);
   });
 
   await t.step("fd_seek", () => {
-    const flags = new Rights(1n << 2n);
+    const flags = new Rights(Rights.fd_seek);
     assertEquals(flags.fd_seek, true);
   });
 
   await t.step("fd_fdstat_set_flags", () => {
-    const flags = new Rights(1n << 3n);
+    const flags = new Rights(Rights.fd_fdstat_set_flags);
     assertEquals(flags.fd_fdstat_set_flags, true);
   });
 
   await t.step("fd_sync", () => {
-    const flags = new Rights(1n << 4n);
+    const flags = new Rights(Rights.fd_sync);
     assertEquals(flags.fd_sync, true);
   });
 
   await t.step("fd_tell", () => {
-    const flags = new Rights(1n << 5n);
+    const flags = new Rights(Rights.fd_tell);
     assertEquals(flags.fd_tell, true);
   });
 
   await t.step("fd_write", () => {
-    const flags = new Rights(1n << 6n);
+    const flags = new Rights(Rights.fd_write);
     assertEquals(flags.fd_write, true);
   });
 
   await t.step("fd_advise", () => {
-    const flags = new Rights(1n << 7n);
+    const flags = new Rights(Rights.fd_advise);
     assertEquals(flags.fd_advise, true);
   });
 
   await t.step("fd_allocate", () => {
-    const flags = new Rights(1n << 8n);
+    const flags = new Rights(Rights.fd_allocate);
     assertEquals(flags.fd_allocate, true);
   });
 
   await t.step("path_create_directory", () => {
-    const flags = new Rights(1n << 9n);
+    const flags = new Rights(Rights.path_create_directory);
     assertEquals(flags.path_create_directory, true);
   });
 
   await t.step("path_create_file", () => {
-    const flags = new Rights(1n << 10n);
+    const flags = new Rights(Rights.path_create_file);
     assertEquals(flags.path_create_file, true);
   });
 
   await t.step("path_link_source", () => {
-    const flags = new Rights(1n << 11n);
+    const flags = new Rights(Rights.path_link_source);
     assertEquals(flags.path_link_source, true);
   });
 
   await t.step("path_link_target", () => {
-    const flags = new Rights(1n << 12n);
+    const flags = new Rights(Rights.path_link_target);
     assertEquals(flags.path_link_target, true);
   });
 
   await t.step("path_open", () => {
-    const flags = new Rights(1n << 13n);
+    const flags = new Rights(Rights.path_open);
     assertEquals(flags.path_open, true);
   });
 
   await t.step("fd_readdir", () => {
-    const flags = new Rights(1n << 14n);
+    const flags = new Rights(Rights.fd_readdir);
     assertEquals(flags.fd_readdir, true);
   });
 
   await t.step("path_readlink", () => {
-    const flags = new Rights(1n << 15n);
+    const flags = new Rights(Rights.path_readlink);
     assertEquals(flags.path_readlink, true);
   });
 
   await t.step("path_rename_source", () => {
-    const flags = new Rights(1n << 16n);
+    const flags = new Rights(Rights.path_rename_source);
     assertEquals(flags.path_rename_source, true);
   });
 
   await t.step("path_rename_target", () => {
-    const flags = new Rights(1n << 17n);
+    const flags = new Rights(Rights.path_rename_target);
     assertEquals(flags.path_rename_target, true);
   });
 
   await t.step("path_filestat_get", () => {
-    const flags = new Rights(1n << 18n);
+    const flags = new Rights(Rights.path_filestat_get);
     assertEquals(flags.path_filestat_get, true);
   });
 
   await t.step("path_filestat_set_size", () => {
-    const flags = new Rights(1n << 19n);
+    const flags = new Rights(Rights.path_filestat_set_size);
     assertEquals(flags.path_filestat_set_size, true);
   });
 
   await t.step("path_filestat_set_times", () => {
-    const flags = new Rights(1n << 20n);
+    const flags = new Rights(Rights.path_filestat_set_times);
     assertEquals(flags.path_filestat_set_times, true);
   });
 
   await t.step("fd_filestat_get", () => {
-    const flags = new Rights(1n << 21n);
+    const flags = new Rights(Rights.fd_filestat_get);
     assertEquals(flags.fd_filestat_get, true);
   });
 
   await t.step("fd_filestat_set_size", () => {
-    const flags = new Rights(1n << 22n);
+    const flags = new Rights(Rights.fd_filestat_set_size);
     assertEquals(flags.fd_filestat_set_size, true);
   });
 
   await t.step("fd_filestat_set_times", () => {
-    const flags = new Rights(1n << 23n);
+    const flags = new Rights(Rights.fd_filestat_set_times);
     assertEquals(flags.fd_filestat_set_times, true);
   });
 
   await t.step("path_symlink", () => {
-    const flags = new Rights(1n << 24n);
+    const flags = new Rights(Rights.path_symlink);
     assertEquals(flags.path_symlink, true);
   });
 
   await t.step("path_remove_directory", () => {
-    const flags = new Rights(1n << 25n);
+    const flags = new Rights(Rights.path_remove_directory);
     assertEquals(flags.path_remove_directory, true);
   });
 
   await t.step("path_unlink_file", () => {
-    const flags = new Rights(1n << 26n);
+    const flags = new Rights(Rights.path_unlink_file);
     assertEquals(flags.path_unlink_file, true);
   });
 
   await t.step("poll_fd_readwrite", () => {
-    const flags = new Rights(1n << 27n);
+    const flags = new Rights(Rights.poll_fd_readwrite);
     assertEquals(flags.poll_fd_readwrite, true);
   });
 
   await t.step("sock_shutdown", () => {
-    const flags = new Rights(1n << 28n);
+    const flags = new Rights(Rights.sock_shutdown);
     assertEquals(flags.sock_shutdown, true);
   });
 
   await t.step("sock_accept", () => {
-    const flags = new Rights(1n << 29n);
+    const flags = new Rights(Rights.sock_accept);
     assertEquals(flags.sock_accept, true);
   });
 });
@@ -374,7 +392,7 @@ Deno.test("filetype", async (t) => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     const pointer: Pointer<Filetype> = randomPointer(Filetype);
 
-    const filetype = new Filetype(100);
+    const filetype = new Filetype(Value(100));
     filetype.store(memory, pointer);
     assertEquals(
       new Uint8Array(memory.buffer, pointer, 8),
@@ -442,7 +460,10 @@ Deno.test("preopentype", async (t) => {
     const data = new DataView(memory.buffer);
     data.setUint8(addOffset(pointer, offset), 1);
 
-    assertEquals(Preopentype.cast(memory, pointer, offset), new Preopentype(1));
+    assertEquals(
+      Preopentype.cast(memory, pointer, offset),
+      new Preopentype(Value(1)),
+    );
   });
 
   await t.step("store()", () => {
@@ -450,7 +471,7 @@ Deno.test("preopentype", async (t) => {
     const pointer: Pointer<Preopentype> = randomPointer(Preopentype);
     const offset = 8;
 
-    const opentype = new Preopentype(1);
+    const opentype = new Preopentype(Value(1));
     opentype.store(memory, pointer, offset);
 
     assertEquals(
@@ -471,7 +492,7 @@ Deno.test("prestat_dir", async (t) => {
 
     assertEquals(
       PrestatDir.cast(memory, pointer, offset),
-      new PrestatDir({ pr_name_len: new Size(16) }),
+      new PrestatDir({ pr_name_len: new Size(Value(16)) }),
     );
   });
 
@@ -481,7 +502,7 @@ Deno.test("prestat_dir", async (t) => {
     const offset = 8;
 
     const prestat = new PrestatDir({
-      pr_name_len: new Size(16),
+      pr_name_len: new Size(Value(16)),
     });
     prestat.store(memory, pointer, offset);
 
@@ -507,8 +528,8 @@ Deno.test("prestat", async (t) => {
     assertEquals(
       Prestat.cast(memory, pointer, offset),
       new Prestat({
-        type: new Preopentype(1),
-        content: new PrestatDir({ pr_name_len: new Size(16) }),
+        type: new Preopentype(Value(1)),
+        content: new PrestatDir({ pr_name_len: new Size(Value(16)) }),
       }),
     );
   });
@@ -519,8 +540,8 @@ Deno.test("prestat", async (t) => {
     const offset = 8;
 
     const stat = new Prestat({
-      type: new Preopentype(1),
-      content: new PrestatDir({ pr_name_len: new Size(16) }),
+      type: new Preopentype(Value(1)),
+      content: new PrestatDir({ pr_name_len: new Size(Value(16)) }),
     });
     stat.store(memory, pointer, offset);
 
@@ -545,7 +566,7 @@ Deno.test("userdata", async (t) => {
 
     assertEquals(
       Userdata.cast(memory, pointer, offset),
-      new Userdata(1n),
+      new Userdata(BigValue(1n)),
     );
   });
 
@@ -554,7 +575,7 @@ Deno.test("userdata", async (t) => {
     const pointer: Pointer<Userdata> = randomPointer(Userdata);
     const offset = 8;
 
-    const data = new Userdata(1n);
+    const data = new Userdata(BigValue(1n));
     data.store(memory, pointer, offset);
 
     assertEquals(

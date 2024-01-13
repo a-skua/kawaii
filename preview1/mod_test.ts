@@ -3,15 +3,18 @@ import {
   assertEquals,
 } from "https://deno.land/std@0.204.0/assert/mod.ts";
 import {
+  BigValue,
   Clockid,
   Data,
   Errno,
+  Exitcode,
   Fd,
   Fdflags,
   Fdstat,
   Filetype,
   Pointer,
   Rights,
+  Value,
 } from "./type.ts";
 import init, {
   Arg,
@@ -53,15 +56,15 @@ Deno.test(Env.name, () => {
 });
 
 Deno.test(sched_yield.name, () => {
-  assertEquals(Errno[sched_yield()], Errno[Errno.Nosys]);
+  assertEquals(sched_yield(), Errno.nosys);
 });
 
 Deno.test(proc_exit.name, () => {
   let catched = false;
   try {
-    proc_exit(1);
+    proc_exit(Value(1));
   } catch (err) {
-    assertEquals(err, new Exit(1));
+    assertEquals(err, new Exit(new Exitcode(Value(1))));
     catched = true;
   }
 
@@ -75,7 +78,7 @@ Deno.test(args_get.name, () => {
 
   init({ memory, args });
 
-  assertEquals(Errno[args_get(Pointer(0), Pointer(8))], Errno[Errno.Success]);
+  assertEquals(args_get(Pointer(0), Pointer(8)), Errno.success);
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 16),
     new Uint8Array([
@@ -94,8 +97,8 @@ Deno.test(args_sizes_get.name, () => {
   init({ memory, args });
 
   assertEquals(
-    Errno[args_sizes_get(Pointer(0), Pointer(4))],
-    Errno[Errno.Success],
+    args_sizes_get(Pointer(0), Pointer(4)),
+    Errno.success,
   );
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 8),
@@ -106,19 +109,19 @@ Deno.test(args_sizes_get.name, () => {
   );
 });
 
-Deno.test(clock_time_get.name, async (t) => {
+Deno.test("clock_time_get", async (t) => {
   const memory = new WebAssembly.Memory({ initial: 1 });
 
   init({ memory });
 
   const data = new DataView(memory.buffer);
 
-  await t.step(Clockid[Clockid.Realtime], () => {
+  await t.step("realtime", () => {
     const pointer = 0;
 
     assertEquals(
-      Errno[clock_time_get(Clockid.Realtime, 0n, Pointer(pointer))],
-      Errno[Errno.Success],
+      clock_time_get(Clockid.realtime, BigValue(0n), Pointer(pointer)),
+      Errno.success,
     );
     assertEquals(
       data.getBigUint64(pointer, true),
@@ -126,11 +129,11 @@ Deno.test(clock_time_get.name, async (t) => {
     );
   });
 
-  await t.step(Clockid[Clockid.Monotonic], () => {
+  await t.step("monotonic", () => {
     const pointer = 8;
     assertEquals(
-      Errno[clock_time_get(Clockid.Monotonic, 0n, Pointer(pointer))],
-      Errno[Errno.Success],
+      clock_time_get(Clockid.monotonic, BigValue(0n), Pointer(pointer)),
+      Errno.success,
     );
     assertEquals(
       data.getBigUint64(pointer, true),
@@ -138,21 +141,29 @@ Deno.test(clock_time_get.name, async (t) => {
     );
   });
 
-  await t.step(Clockid[Clockid.ProcessCputimeId], () => {
+  await t.step("process_cputime_id", () => {
     const pointer = 16;
 
     assertEquals(
-      Errno[clock_time_get(Clockid.ProcessCputimeId, 0n, Pointer(pointer))],
-      Errno[Errno.Notsup],
+      clock_time_get(
+        Clockid.process_cputime_id,
+        BigValue(0n),
+        Pointer(pointer),
+      ),
+      Errno.notsup,
     );
   });
 
-  await t.step(Clockid[Clockid.ThreadCputimeId], () => {
+  await t.step("thread_cputime_id", () => {
     const pointer = 24;
 
     assertEquals(
-      Errno[clock_time_get(Clockid.ThreadCputimeId, 0n, Pointer(pointer))],
-      Errno[Errno.Notsup],
+      clock_time_get(
+        Clockid.thread_cputime_id,
+        BigValue(0n),
+        Pointer(pointer),
+      ),
+      Errno.notsup,
     );
   });
 });
@@ -164,8 +175,8 @@ Deno.test(environ_get.name, () => {
 
   init({ memory, envs });
   assertEquals(
-    Errno[environ_get(Pointer(0), Pointer(8))],
-    Errno[Errno.Success],
+    environ_get(Pointer(0), Pointer(8)),
+    Errno.success,
   );
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 24),
@@ -185,8 +196,8 @@ Deno.test(environ_sizes_get.name, () => {
   init({ memory, envs });
 
   assertEquals(
-    Errno[environ_sizes_get(Pointer(0), Pointer(4))],
-    Errno[Errno.Success],
+    environ_sizes_get(Pointer(0), Pointer(4)),
+    Errno.success,
   );
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 8),
@@ -221,8 +232,8 @@ Deno.test(fd_write.name, async (t) => {
     encoder.encodeInto("World", array.subarray(105));
 
     assertEquals(
-      Errno[fd_write(Fd.Stdout, Pointer(4), 2, Pointer(0))],
-      Errno[Errno.Success],
+      fd_write(Fd.stdout, Pointer(4), Value(2), Pointer(0)),
+      Errno.success,
     );
     assertEquals(data.getUint32(0, true), 10);
     assertEquals(stdout, "HelloWorld");
@@ -238,8 +249,8 @@ Deno.test(fd_write.name, async (t) => {
     encoder.encodeInto("World!", array.subarray(107));
 
     assertEquals(
-      Errno[fd_write(Fd.Stderr, Pointer(4), 2, Pointer(0))],
-      Errno[Errno.Success],
+      fd_write(Fd.stderr, Pointer(4), Value(2), Pointer(0)),
+      Errno.success,
     );
     assertEquals(data.getUint32(0, true), 13);
     assertEquals(stderr, "Hello, World!");
@@ -252,8 +263,8 @@ Deno.test(random_get.name, () => {
   init({ memory });
 
   assertEquals(
-    Errno[random_get(Pointer(100), Pointer(8))],
-    Errno[Errno.Success],
+    random_get(Pointer(100), Value(8)),
+    Errno.success,
   );
   assert(new Uint8Array(memory.buffer, 100, 8).reduce((sum, n) => sum + n) > 0);
 });
@@ -261,15 +272,15 @@ Deno.test(random_get.name, () => {
 Deno.test(poll_oneoff.name, async (t) => {
   await t.step("nsubscriptions is 0", () => {
     assertEquals(
-      Errno[poll_oneoff(Pointer(0), Pointer(0), 0, Pointer(0))],
-      Errno[Errno.Inval],
+      poll_oneoff(Pointer(0), Pointer(0), Value(0), Pointer(0)),
+      Errno.inval,
     );
   });
 
   await t.step("normal", () => {
     assertEquals(
-      Errno[poll_oneoff(Pointer(0), Pointer(0), 1, Pointer(0))],
-      Errno[Errno.Notsup],
+      poll_oneoff(Pointer(0), Pointer(0), Value(1), Pointer(0)),
+      Errno.notsup,
     );
   });
 });
@@ -280,7 +291,7 @@ Deno.test("fd_fdstat_get", async (t) => {
     init({ memory });
 
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
-    assertEquals(Errno[fd_fdstat_get(Fd.Stdin, pointer)], Errno[Errno.Success]);
+    assertEquals(fd_fdstat_get(Fd.stdin, pointer), Errno.success);
     assertEquals(
       Fdstat.cast(memory, pointer),
       new Fdstat({
@@ -298,8 +309,8 @@ Deno.test("fd_fdstat_get", async (t) => {
 
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
-      Errno[fd_fdstat_get(Fd.Stdout, pointer)],
-      Errno[Errno.Success],
+      fd_fdstat_get(Fd.stdout, pointer),
+      Errno.success,
     );
     assertEquals(
       Fdstat.cast(memory, pointer),
@@ -318,8 +329,8 @@ Deno.test("fd_fdstat_get", async (t) => {
 
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
-      Errno[fd_fdstat_get(Fd.Stderr, pointer)],
-      Errno[Errno.Success],
+      fd_fdstat_get(Fd.stderr, pointer),
+      Errno.success,
     );
     assertEquals(
       Fdstat.cast(memory, pointer),
@@ -334,7 +345,7 @@ Deno.test("fd_fdstat_get", async (t) => {
 
   await t.step("undefined", () => {
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
-    assertEquals(Errno[fd_fdstat_get(3, pointer)], Errno[Errno.Badf]);
+    assertEquals(fd_fdstat_get(Value(3), pointer), Errno.badf);
   });
 });
 
@@ -344,8 +355,8 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
     init({ memory });
 
     assertEquals(
-      Errno[fd_fdstat_set_flags(Fd.Stdin, Fdflags.nonblock)],
-      Errno[Errno.Success],
+      fd_fdstat_set_flags(Fd.stdin, Fdflags.nonblock),
+      Errno.success,
     );
   });
 
@@ -354,8 +365,8 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
     init({ memory });
 
     assertEquals(
-      Errno[fd_fdstat_set_flags(Fd.Stdout, Fdflags.nonblock)],
-      Errno[Errno.Success],
+      fd_fdstat_set_flags(Fd.stdout, Fdflags.nonblock),
+      Errno.success,
     );
   });
 
@@ -364,8 +375,8 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
     init({ memory });
 
     assertEquals(
-      Errno[fd_fdstat_set_flags(Fd.Stderr, Fdflags.nonblock)],
-      Errno[Errno.Success],
+      fd_fdstat_set_flags(Fd.stderr, Fdflags.nonblock),
+      Errno.success,
     );
   });
   await t.step("undefined", () => {
@@ -373,8 +384,8 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
     init({ memory });
 
     assertEquals(
-      Errno[fd_fdstat_set_flags(3, Fdflags.nonblock)],
-      Errno[Errno.Badf],
+      fd_fdstat_set_flags(Value(3), Fdflags.nonblock),
+      Errno.badf,
     );
   });
 });
