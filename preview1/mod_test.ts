@@ -4,11 +4,13 @@ import {
 } from "https://deno.land/std@0.204.0/assert/mod.ts";
 import {
   Clockid,
+  Data,
   Errno,
   Fd,
   Fdflags,
   Fdstat,
   Filetype,
+  Pointer,
   Rights,
 } from "./type.ts";
 import init, {
@@ -33,9 +35,11 @@ interface DataType {
   alignment: number;
 }
 
-const randomPointer = ({ alignment }: DataType): number => {
+const randomPointer = <T extends Data<string>>(
+  { alignment }: DataType,
+): Pointer<T> => {
   const random = Math.floor(Math.random() * (1024 / alignment));
-  return random * alignment;
+  return Pointer(random * alignment);
 };
 
 Deno.test(Arg.name, () => {
@@ -71,7 +75,7 @@ Deno.test(args_get.name, () => {
 
   init({ memory, args });
 
-  assertEquals(Errno[args_get(0, 8)], Errno[Errno.Success]);
+  assertEquals(Errno[args_get(Pointer(0), Pointer(8))], Errno[Errno.Success]);
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 16),
     new Uint8Array([
@@ -89,7 +93,10 @@ Deno.test(args_sizes_get.name, () => {
 
   init({ memory, args });
 
-  assertEquals(Errno[args_sizes_get(0, 4)], Errno[Errno.Success]);
+  assertEquals(
+    Errno[args_sizes_get(Pointer(0), Pointer(4))],
+    Errno[Errno.Success],
+  );
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 8),
     new Uint8Array([
@@ -110,7 +117,7 @@ Deno.test(clock_time_get.name, async (t) => {
     const pointer = 0;
 
     assertEquals(
-      Errno[clock_time_get(Clockid.Realtime, 0n, pointer)],
+      Errno[clock_time_get(Clockid.Realtime, 0n, Pointer(pointer))],
       Errno[Errno.Success],
     );
     assertEquals(
@@ -122,7 +129,7 @@ Deno.test(clock_time_get.name, async (t) => {
   await t.step(Clockid[Clockid.Monotonic], () => {
     const pointer = 8;
     assertEquals(
-      Errno[clock_time_get(Clockid.Monotonic, 0n, pointer)],
+      Errno[clock_time_get(Clockid.Monotonic, 0n, Pointer(pointer))],
       Errno[Errno.Success],
     );
     assertEquals(
@@ -135,7 +142,7 @@ Deno.test(clock_time_get.name, async (t) => {
     const pointer = 16;
 
     assertEquals(
-      Errno[clock_time_get(Clockid.ProcessCputimeId, 0n, pointer)],
+      Errno[clock_time_get(Clockid.ProcessCputimeId, 0n, Pointer(pointer))],
       Errno[Errno.Notsup],
     );
   });
@@ -144,7 +151,7 @@ Deno.test(clock_time_get.name, async (t) => {
     const pointer = 24;
 
     assertEquals(
-      Errno[clock_time_get(Clockid.ThreadCputimeId, 0n, pointer)],
+      Errno[clock_time_get(Clockid.ThreadCputimeId, 0n, Pointer(pointer))],
       Errno[Errno.Notsup],
     );
   });
@@ -156,7 +163,10 @@ Deno.test(environ_get.name, () => {
   const encoder = new TextEncoder();
 
   init({ memory, envs });
-  assertEquals(Errno[environ_get(0, 8)], Errno[Errno.Success]);
+  assertEquals(
+    Errno[environ_get(Pointer(0), Pointer(8))],
+    Errno[Errno.Success],
+  );
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 24),
     new Uint8Array([
@@ -174,7 +184,10 @@ Deno.test(environ_sizes_get.name, () => {
 
   init({ memory, envs });
 
-  assertEquals(Errno[environ_sizes_get(0, 4)], Errno[Errno.Success]);
+  assertEquals(
+    Errno[environ_sizes_get(Pointer(0), Pointer(4))],
+    Errno[Errno.Success],
+  );
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 8),
     new Uint8Array([
@@ -207,7 +220,10 @@ Deno.test(fd_write.name, async (t) => {
     data.setUint32(16, 5, true);
     encoder.encodeInto("World", array.subarray(105));
 
-    assertEquals(Errno[fd_write(Fd.Stdout, 4, 2, 0)], Errno[Errno.Success]);
+    assertEquals(
+      Errno[fd_write(Fd.Stdout, Pointer(4), 2, Pointer(0))],
+      Errno[Errno.Success],
+    );
     assertEquals(data.getUint32(0, true), 10);
     assertEquals(stdout, "HelloWorld");
   });
@@ -221,7 +237,10 @@ Deno.test(fd_write.name, async (t) => {
     data.setUint32(16, 6, true);
     encoder.encodeInto("World!", array.subarray(107));
 
-    assertEquals(Errno[fd_write(Fd.Stderr, 4, 2, 0)], Errno[Errno.Success]);
+    assertEquals(
+      Errno[fd_write(Fd.Stderr, Pointer(4), 2, Pointer(0))],
+      Errno[Errno.Success],
+    );
     assertEquals(data.getUint32(0, true), 13);
     assertEquals(stderr, "Hello, World!");
   });
@@ -232,17 +251,26 @@ Deno.test(random_get.name, () => {
 
   init({ memory });
 
-  assertEquals(Errno[random_get(100, 8)], Errno[Errno.Success]);
+  assertEquals(
+    Errno[random_get(Pointer(100), Pointer(8))],
+    Errno[Errno.Success],
+  );
   assert(new Uint8Array(memory.buffer, 100, 8).reduce((sum, n) => sum + n) > 0);
 });
 
 Deno.test(poll_oneoff.name, async (t) => {
   await t.step("nsubscriptions is 0", () => {
-    assertEquals(Errno[poll_oneoff(0, 0, 0, 0)], Errno[Errno.Inval]);
+    assertEquals(
+      Errno[poll_oneoff(Pointer(0), Pointer(0), 0, Pointer(0))],
+      Errno[Errno.Inval],
+    );
   });
 
   await t.step("normal", () => {
-    assertEquals(Errno[poll_oneoff(0, 0, 1, 0)], Errno[Errno.Notsup]);
+    assertEquals(
+      Errno[poll_oneoff(Pointer(0), Pointer(0), 1, Pointer(0))],
+      Errno[Errno.Notsup],
+    );
   });
 });
 
@@ -251,7 +279,7 @@ Deno.test("fd_fdstat_get", async (t) => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     init({ memory });
 
-    const pointer = randomPointer(Fdstat);
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(Errno[fd_fdstat_get(Fd.Stdin, pointer)], Errno[Errno.Success]);
     assertEquals(
       Fdstat.cast(memory, pointer),
@@ -268,7 +296,7 @@ Deno.test("fd_fdstat_get", async (t) => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     init({ memory });
 
-    const pointer = randomPointer(Fdstat);
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
       Errno[fd_fdstat_get(Fd.Stdout, pointer)],
       Errno[Errno.Success],
@@ -288,7 +316,7 @@ Deno.test("fd_fdstat_get", async (t) => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     init({ memory });
 
-    const pointer = randomPointer(Fdstat);
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
       Errno[fd_fdstat_get(Fd.Stderr, pointer)],
       Errno[Errno.Success],
@@ -305,7 +333,7 @@ Deno.test("fd_fdstat_get", async (t) => {
   });
 
   await t.step("undefined", () => {
-    const pointer = randomPointer(Fdstat);
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(Errno[fd_fdstat_get(3, pointer)], Errno[Errno.Badf]);
   });
 });

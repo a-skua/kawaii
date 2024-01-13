@@ -1,5 +1,7 @@
 import {
+  BigValue,
   Ciovec,
+  CiovecArray,
   Clockid,
   Errno,
   Event,
@@ -10,7 +12,7 @@ import {
   Filesize,
   Filestat,
   Filetype,
-  Iovec,
+  IovecArray,
   Pointer,
   Prestat,
   Rights,
@@ -80,12 +82,12 @@ export function args_get(
 
   for (const arg of args) {
     data.setUint32(argv, argv_buf, true);
-    argv += 4;
+    argv = Pointer(argv + 4);
     const { written } = encoder.encodeInto(
       `${arg}\0`,
       array.subarray(argv_buf),
     );
-    argv_buf += written;
+    argv_buf = Pointer(argv_buf + written);
   }
   return Errno.Success;
 }
@@ -114,7 +116,7 @@ export function args_sizes_get(
 // POSIX.
 export function clock_time_get(
   id: Clockid,
-  _precision: Timestamp,
+  _precision: BigValue<Timestamp>,
   result: Pointer<Timestamp>,
 ): Errno {
   const data = new DataView(memory.buffer);
@@ -148,10 +150,10 @@ export function environ_get(
 
   for (const env of envs) {
     data.setUint32(environ, env_buf, true);
-    environ += 4;
+    environ = Pointer(environ + 4);
 
     const { written } = encoder.encodeInto(`${env}\0`, array.subarray(env_buf));
-    env_buf += written;
+    env_buf = Pointer(env_buf + written);
   }
   return Errno.Success;
 }
@@ -183,8 +185,8 @@ export function environ_sizes_get(
 // while write is executed.
 export function fd_write(
   fd: Fd,
-  iovs: Pointer<Ciovec[]>,
-  iovs_size: Size,
+  iovs: Pointer<CiovecArray>,
+  iovs_size: Value<Size>,
   result: Pointer<Size>,
 ): Errno {
   const array = new Uint8Array(memory.buffer);
@@ -192,11 +194,11 @@ export function fd_write(
   let len = 0;
 
   for (let i = 0; i < iovs_size; i++) {
-    const iov = Ciovec.cast(memory, iovs);
-    iovs += iov.size;
+    const iov = Ciovec.cast(memory, Pointer(iovs));
+    iovs = Pointer(iovs + iov.size);
 
-    str += decoder.decode(array.subarray(iov.buf, iov.buf + iov.len));
-    len += iov.len;
+    str += decoder.decode(array.subarray(iov.buf, iov.buf + iov.len.value));
+    len += iov.len.value;
   }
 
   switch (fd) {
@@ -223,7 +225,7 @@ export function fd_write(
 // data are required, it's advisable to use this function to seed a
 // pseudo-random number generator, rather than to provide the random data
 // directly.
-export function random_get(buf: Pointer<U8>, len: Size): Errno {
+export function random_get(buf: Pointer<U8>, len: Value<Size>): Errno {
   crypto.getRandomValues(new Uint8Array(memory.buffer, buf, len));
   return Errno.Success;
 }
@@ -235,7 +237,7 @@ export function random_get(buf: Pointer<U8>, len: Size): Errno {
 export function poll_oneoff(
   _in: Pointer<Subscription>,
   _out: Pointer<Event>,
-  nsubscriptions: Size,
+  nsubscriptions: Value<Size>,
   _result: Pointer<Size>,
 ): Errno {
   if (nsubscriptions === 0) {
@@ -264,7 +266,7 @@ export function fd_filestat_get(_fd: Fd, _result: Pointer<Filestat>): Errno {
 // offset. Note: This is similar to preadv in Linux (and other Unix-es).
 export function fd_pread(
   _fd: Fd,
-  _iovs: Pointer<Iovec[]>,
+  _iovs: Pointer<IovecArray>,
   _offset: Filesize,
   _result: Pointer<Size>,
 ): Errno {
@@ -281,7 +283,7 @@ export function fd_pread(
 
 export function fd_pwrite(
   _fd: Fd,
-  _iovs: Pointer<Ciovec[]>,
+  _iovs: Pointer<CiovecArray>,
   _offset: Filesize,
   _result: Pointer<Size>,
 ): Errno {
@@ -293,7 +295,7 @@ export function fd_pwrite(
 // Read from a file descriptor. Note: This is similar to readv in POSIX.
 export function fd_read(
   _fd: Fd,
-  _iovs: Pointer<Iovec[]>,
+  _iovs: Pointer<IovecArray>,
   _result: Pointer<Size>,
 ): Errno {
   return Errno.Nosys;
@@ -356,7 +358,7 @@ export function fd_fdstat_set_flags(fd: Fd, flags: Value<Fdflags>): Errno {
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_get(_fd: Fd, _result: Pointer<Prestat>): Errno {
-  return Errno.Nosys;
+  return Errno.Notsup;
 }
 
 // fd_prestat_dir_name(fd: fd, path: Pointer<u8>, path_len: size) -> Result<(), errno>

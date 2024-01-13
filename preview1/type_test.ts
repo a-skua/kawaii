@@ -1,6 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.204.0/assert/mod.ts";
 import {
   Ciovec,
+  Data,
   Errno,
   Event,
   EventFdReadwrite,
@@ -10,36 +11,58 @@ import {
   Fdstat,
   Filetype,
   Pointer,
+  Preopentype,
+  Prestat,
+  PrestatDir,
   Rights,
+  Size,
+  Userdata,
 } from "./type.ts";
 
 interface DataType {
   alignment: number;
 }
 
-const randomPointer = ({ alignment }: DataType): number => {
+const randomPointer = <T extends Data<string>>(
+  { alignment }: DataType,
+): Pointer<T> => {
   const random = Math.floor(Math.random() * (1024 / alignment));
-  return random * alignment;
+  return Pointer(random * alignment);
 };
 
-const addOffset = <T>(pointer: Pointer<T>, offset: number): Pointer<T> =>
-  pointer + (offset * 8);
+const addOffset = <T extends Data<string>>(
+  pointer: Pointer<T>,
+  offset: number,
+): Pointer<T> => Pointer(pointer + offset);
 
-Deno.test(Ciovec.name, () => {
-  const memory = new WebAssembly.Memory({ initial: 1 });
-  const data = new DataView(memory.buffer);
-  data.setUint32(0, 8, true);
-  data.setUint32(4, 16, true);
-  assertEquals(Ciovec.cast(memory, 0), new Ciovec(8, 16));
+Deno.test("ciovec", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Ciovec> = randomPointer(Ciovec);
+    const data = new DataView(memory.buffer);
+
+    data.setUint32(addOffset(pointer, 0), 8, true);
+    data.setUint32(addOffset(pointer, 4), 16, true);
+    assertEquals(
+      Ciovec.cast(memory, pointer),
+      new Ciovec(Pointer(8), new Size(16)),
+    );
+  });
+
+  await t.step("store()", () => {
+    // TODO
+  });
 });
 
-Deno.test(Eventrwflags.name, async (t) => {
-  const memory = new WebAssembly.Memory({ initial: 1 });
-  const data = new DataView(memory.buffer);
+Deno.test("eventrwflags", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Eventrwflags> = randomPointer(Eventrwflags);
 
-  await t.step(Eventrwflags.cast.name, () => {
-    data.setUint16(0, 1, true);
-    assertEquals(Eventrwflags.cast(memory, 0), new Eventrwflags(1));
+    const data = new DataView(memory.buffer);
+    data.setUint16(pointer, 1, true);
+
+    assertEquals(Eventrwflags.cast(memory, pointer), new Eventrwflags(1));
   });
 
   await t.step("fdReadwriteHangup is true", () => {
@@ -53,40 +76,58 @@ Deno.test(Eventrwflags.name, async (t) => {
   });
 });
 
-Deno.test(EventFdReadwrite.name, () => {
-  const memory = new WebAssembly.Memory({ initial: 1 });
-  const data = new DataView(memory.buffer);
-  data.setBigUint64(0, 1024n, true);
-  data.setUint16(8, 1, true);
-  assertEquals(
-    EventFdReadwrite.cast(memory, 0),
-    new EventFdReadwrite(1024n, new Eventrwflags(1)),
-  );
+Deno.test("event_fd_readwrite", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<EventFdReadwrite> = randomPointer(EventFdReadwrite);
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, 0), 1024n, true);
+    data.setUint16(addOffset(pointer, 8), 1, true);
+
+    assertEquals(
+      EventFdReadwrite.cast(memory, pointer),
+      new EventFdReadwrite(1024n, new Eventrwflags(1)),
+    );
+  });
+
+  await t.step("store()", () => {
+    // TODO
+  });
 });
 
-Deno.test(Event.name, () => {
-  const memory = new WebAssembly.Memory({ initial: 1 });
-  const data = new DataView(memory.buffer);
-  data.setBigUint64(0, 100n, true);
-  data.setUint16(8, Errno.Notsup, true);
-  data.setUint8(10, Eventtype.FdWrite);
-  data.setBigUint64(16, 1024n, true);
-  data.setUint16(24, 1, true);
-  assertEquals(
-    Event.cast(memory, 0),
-    new Event(
-      100n,
-      Errno.Notsup,
-      Eventtype.FdWrite,
-      new EventFdReadwrite(1024n, new Eventrwflags(1)),
-    ),
-  );
+Deno.test(Event.name, async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Event> = randomPointer(Event);
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, 0), 100n, true);
+    data.setUint16(addOffset(pointer, 8), Errno.Notsup, true);
+    data.setUint8(addOffset(pointer, 10), Eventtype.FdWrite);
+    data.setBigUint64(addOffset(pointer, 16), 1024n, true);
+    data.setUint16(addOffset(pointer, 24), 1, true);
+
+    assertEquals(
+      Event.cast(memory, pointer),
+      new Event(
+        new Userdata(100n),
+        Errno.Notsup,
+        Eventtype.FdWrite,
+        new EventFdReadwrite(1024n, new Eventrwflags(1)),
+      ),
+    );
+  });
+
+  await t.step("store()", () => {
+    // TODO
+  });
 });
 
 Deno.test("fdflags", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Fdflags);
+    const pointer: Pointer<Fdflags> = randomPointer(Fdflags);
     const data = new DataView(memory.buffer);
 
     data.setUint16(pointer, Fdflags.dsync | Fdflags.rsync, true);
@@ -95,7 +136,7 @@ Deno.test("fdflags", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Fdflags);
+    const pointer: Pointer<Fdflags> = randomPointer(Fdflags);
 
     const flags = new Fdflags(Fdflags.sync);
     flags.store(memory, pointer);
@@ -137,7 +178,7 @@ Deno.test("fdflags", async (t) => {
 Deno.test("rights", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Rights);
+    const pointer: Pointer<Rights> = randomPointer(Rights);
     const data = new DataView(memory.buffer);
 
     data.setBigUint64(pointer, 1_000_000n, true);
@@ -146,7 +187,7 @@ Deno.test("rights", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Rights);
+    const pointer: Pointer<Rights> = randomPointer(Rights);
 
     const rights = new Rights(Rights.fd_write);
     rights.store(memory, pointer);
@@ -319,7 +360,7 @@ Deno.test("rights", async (t) => {
 Deno.test("filetype", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Filetype);
+    const pointer: Pointer<Filetype> = randomPointer(Filetype);
     const data = new DataView(memory.buffer);
     data.setUint8(pointer, Filetype.character_device);
 
@@ -331,7 +372,7 @@ Deno.test("filetype", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Filetype);
+    const pointer: Pointer<Filetype> = randomPointer(Filetype);
 
     const filetype = new Filetype(100);
     filetype.store(memory, pointer);
@@ -345,7 +386,7 @@ Deno.test("filetype", async (t) => {
 Deno.test("fdstat", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Fdstat);
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     const offset = 8;
     const data = new DataView(memory.buffer);
     data.setUint8(addOffset(pointer, offset), Filetype.character_device);
@@ -366,7 +407,7 @@ Deno.test("fdstat", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Fdstat);
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     const offset = 8;
 
     const fdstat = new Fdstat({
@@ -377,37 +418,162 @@ Deno.test("fdstat", async (t) => {
     });
     fdstat.store(memory, pointer, offset);
     assertEquals(
-      new Uint8Array(memory.buffer, addOffset(pointer, offset), 24 * 8),
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), 24),
       new Uint8Array([
         // fs_filetype
-        ...[2, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[2, 0],
         // fd_flags,
-        ...[4, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[4, 0, 0, 0, 0, 0],
         // fs_rights_base
         ...[64, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
         // fs_rights_inheriting
         ...[64, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
-        ...[0, 0, 0, 0, 0, 0, 0, 0],
       ]),
     );
   });
+});
+
+Deno.test("preopentype", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Preopentype> = randomPointer(Preopentype);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint8(addOffset(pointer, offset), 1);
+
+    assertEquals(Preopentype.cast(memory, pointer, offset), new Preopentype(1));
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Preopentype> = randomPointer(Preopentype);
+    const offset = 8;
+
+    const opentype = new Preopentype(1);
+    opentype.store(memory, pointer, offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), 8),
+      new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("prestat_dir", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<PrestatDir> = randomPointer(PrestatDir);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint32(addOffset(pointer, offset), 16, true);
+
+    assertEquals(
+      PrestatDir.cast(memory, pointer, offset),
+      new PrestatDir({ pr_name_len: new Size(16) }),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer<PrestatDir>(PrestatDir);
+    const offset = 8;
+
+    const prestat = new PrestatDir({
+      pr_name_len: new Size(16),
+    });
+    prestat.store(memory, pointer, offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), 4),
+      new Uint8Array([
+        ...[16, 0, 0, 0],
+      ]),
+    );
+  });
+});
+
+Deno.test("prestat", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Prestat> = randomPointer(Prestat);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint8(addOffset(pointer, offset), 1);
+    data.setUint32(addOffset(pointer, offset + 4), 16, true);
+
+    assertEquals(
+      Prestat.cast(memory, pointer, offset),
+      new Prestat({
+        type: new Preopentype(1),
+        content: new PrestatDir({ pr_name_len: new Size(16) }),
+      }),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Prestat> = randomPointer(Prestat);
+    const offset = 8;
+
+    const stat = new Prestat({
+      type: new Preopentype(1),
+      content: new PrestatDir({ pr_name_len: new Size(16) }),
+    });
+    stat.store(memory, pointer, offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), 8),
+      new Uint8Array([
+        ...[1, 0, 0, 0],
+        ...[16, 0, 0, 0],
+      ]),
+    );
+  });
+});
+
+Deno.test("userdata", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Userdata> = randomPointer(Userdata);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 1n, true);
+
+    assertEquals(
+      Userdata.cast(memory, pointer, offset),
+      new Userdata(1n),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer: Pointer<Userdata> = randomPointer(Userdata);
+    const offset = 8;
+
+    const data = new Userdata(1n);
+    data.store(memory, pointer, offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), 8),
+      new Uint8Array([
+        ...[1, 0, 0, 0, 0, 0, 0, 0],
+      ]),
+    );
+  });
+});
+
+Deno.test("u8", async (t) => {
+  // TODO
+});
+
+Deno.test("size", async (t) => {
+  // TODO
+});
+
+Deno.test("timestamp", async (t) => {
+  // TODO
 });
