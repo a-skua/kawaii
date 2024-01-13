@@ -7,8 +7,23 @@ import {
   Eventrwflags,
   Eventtype,
   Fdflags,
+  Fdstat,
+  Filetype,
+  Pointer,
   Rights,
 } from "./type.ts";
+
+interface DataType {
+  alignment: number;
+}
+
+const randomPointer = ({ alignment }: DataType): number => {
+  const random = Math.floor(Math.random() * (1024 / alignment));
+  return random * alignment;
+};
+
+const addOffset = <T>(pointer: Pointer<T>, offset: number): Pointer<T> =>
+  pointer + (offset * 8);
 
 Deno.test(Ciovec.name, () => {
   const memory = new WebAssembly.Memory({ initial: 1 });
@@ -68,12 +83,29 @@ Deno.test(Event.name, () => {
   );
 });
 
-Deno.test(Fdflags.name, async (t) => {
-  await t.step(Fdflags.cast.name, () => {
+Deno.test("fdflags", async (t) => {
+  await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Fdflags);
     const data = new DataView(memory.buffer);
-    data.setUint16(0, Fdflags.dsync | Fdflags.rsync, true);
-    assertEquals(Fdflags.cast(memory, 0), new Fdflags(10));
+
+    data.setUint16(pointer, Fdflags.dsync | Fdflags.rsync, true);
+    assertEquals(Fdflags.cast(memory, pointer), new Fdflags(10));
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Fdflags);
+
+    const flags = new Fdflags(Fdflags.sync);
+    flags.store(memory, pointer);
+    assertEquals(
+      new Uint8Array(memory.buffer, pointer, 16),
+      new Uint8Array([
+        ...[16, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+      ]),
+    );
   });
 
   await t.step("append", () => {
@@ -102,156 +134,280 @@ Deno.test(Fdflags.name, async (t) => {
   });
 });
 
-Deno.test(Rights.name, async (t) => {
-  await t.step(Rights.cast.name, () => {
+Deno.test("rights", async (t) => {
+  await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Rights);
     const data = new DataView(memory.buffer);
-    data.setBigUint64(0, 1_000_000n, true);
-    assertEquals(Rights.cast(memory, 0), new Rights(1_000_000n));
+
+    data.setBigUint64(pointer, 1_000_000n, true);
+    assertEquals(Rights.cast(memory, pointer), new Rights(1_000_000n));
   });
 
-  await t.step("fdRead", () => {
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Rights);
+
+    const rights = new Rights(Rights.fd_write);
+    rights.store(memory, pointer);
+    assertEquals(
+      new Uint8Array(memory.buffer, pointer, 64),
+      new Uint8Array([
+        ...[64, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+      ]),
+    );
+  });
+
+  await t.step("fd_datasync", () => {
+    const flags = new Rights(1n << 0n);
+    assertEquals(flags.fd_datasync, true);
+  });
+
+  await t.step("fd_read", () => {
     const flags = new Rights(1n << 1n);
-    assertEquals(flags.fdRead, true);
+    assertEquals(flags.fd_read, true);
   });
 
-  await t.step("fdSeek", () => {
+  await t.step("fd_seek", () => {
     const flags = new Rights(1n << 2n);
-    assertEquals(flags.fdSeek, true);
+    assertEquals(flags.fd_seek, true);
   });
 
-  await t.step("fdFdstatSetFlags", () => {
+  await t.step("fd_fdstat_set_flags", () => {
     const flags = new Rights(1n << 3n);
-    assertEquals(flags.fdFdstatSetFlags, true);
+    assertEquals(flags.fd_fdstat_set_flags, true);
   });
 
-  await t.step("fdSync", () => {
+  await t.step("fd_sync", () => {
     const flags = new Rights(1n << 4n);
-    assertEquals(flags.fdSync, true);
+    assertEquals(flags.fd_sync, true);
   });
 
-  await t.step("fdTell", () => {
+  await t.step("fd_tell", () => {
     const flags = new Rights(1n << 5n);
-    assertEquals(flags.fdTell, true);
+    assertEquals(flags.fd_tell, true);
   });
 
-  await t.step("fdWrite", () => {
+  await t.step("fd_write", () => {
     const flags = new Rights(1n << 6n);
-    assertEquals(flags.fdWrite, true);
+    assertEquals(flags.fd_write, true);
   });
 
-  await t.step("fdAdvise", () => {
+  await t.step("fd_advise", () => {
     const flags = new Rights(1n << 7n);
-    assertEquals(flags.fdAdvise, true);
+    assertEquals(flags.fd_advise, true);
   });
 
-  await t.step("fdAllocate", () => {
+  await t.step("fd_allocate", () => {
     const flags = new Rights(1n << 8n);
-    assertEquals(flags.fdAllocate, true);
+    assertEquals(flags.fd_allocate, true);
   });
 
-  await t.step("pathCreateDirectory", () => {
+  await t.step("path_create_directory", () => {
     const flags = new Rights(1n << 9n);
-    assertEquals(flags.pathCreateDirectory, true);
+    assertEquals(flags.path_create_directory, true);
   });
 
-  await t.step("pathCreateFile", () => {
+  await t.step("path_create_file", () => {
     const flags = new Rights(1n << 10n);
-    assertEquals(flags.pathCreateFile, true);
+    assertEquals(flags.path_create_file, true);
   });
 
-  await t.step("pathLinkSource", () => {
+  await t.step("path_link_source", () => {
     const flags = new Rights(1n << 11n);
-    assertEquals(flags.pathLinkSource, true);
+    assertEquals(flags.path_link_source, true);
   });
 
-  await t.step("pathLinkTarget", () => {
+  await t.step("path_link_target", () => {
     const flags = new Rights(1n << 12n);
-    assertEquals(flags.pathLinkTarget, true);
+    assertEquals(flags.path_link_target, true);
   });
 
-  await t.step("pathOpen", () => {
+  await t.step("path_open", () => {
     const flags = new Rights(1n << 13n);
-    assertEquals(flags.pathOpen, true);
+    assertEquals(flags.path_open, true);
   });
 
-  await t.step("fdReaddir", () => {
+  await t.step("fd_readdir", () => {
     const flags = new Rights(1n << 14n);
-    assertEquals(flags.fdReaddir, true);
+    assertEquals(flags.fd_readdir, true);
   });
 
-  await t.step("pathReadlink", () => {
+  await t.step("path_readlink", () => {
     const flags = new Rights(1n << 15n);
-    assertEquals(flags.pathReadlink, true);
+    assertEquals(flags.path_readlink, true);
   });
 
-  await t.step("pathRenameSource", () => {
+  await t.step("path_rename_source", () => {
     const flags = new Rights(1n << 16n);
-    assertEquals(flags.pathRenameSource, true);
+    assertEquals(flags.path_rename_source, true);
   });
 
-  await t.step("pathRenameTarget", () => {
+  await t.step("path_rename_target", () => {
     const flags = new Rights(1n << 17n);
-    assertEquals(flags.pathRenameTarget, true);
+    assertEquals(flags.path_rename_target, true);
   });
 
-  await t.step("pathFilestatGet", () => {
+  await t.step("path_filestat_get", () => {
     const flags = new Rights(1n << 18n);
-    assertEquals(flags.pathFilestatGet, true);
+    assertEquals(flags.path_filestat_get, true);
   });
 
-  await t.step("pathFilestatSetSize", () => {
+  await t.step("path_filestat_set_size", () => {
     const flags = new Rights(1n << 19n);
-    assertEquals(flags.pathFilestatSetSize, true);
+    assertEquals(flags.path_filestat_set_size, true);
   });
 
-  await t.step("pathFilestatSetTimes", () => {
+  await t.step("path_filestat_set_times", () => {
     const flags = new Rights(1n << 20n);
-    assertEquals(flags.pathFilestatSetTimes, true);
+    assertEquals(flags.path_filestat_set_times, true);
   });
 
-  await t.step("fdFilestatGet", () => {
+  await t.step("fd_filestat_get", () => {
     const flags = new Rights(1n << 21n);
-    assertEquals(flags.fdFilestatGet, true);
+    assertEquals(flags.fd_filestat_get, true);
   });
 
-  await t.step("fdFilestatSetSize", () => {
+  await t.step("fd_filestat_set_size", () => {
     const flags = new Rights(1n << 22n);
-    assertEquals(flags.fdFilestatSetSize, true);
+    assertEquals(flags.fd_filestat_set_size, true);
   });
 
-  await t.step("fdFilestatSetTimes", () => {
+  await t.step("fd_filestat_set_times", () => {
     const flags = new Rights(1n << 23n);
-    assertEquals(flags.fdFilestatSetTimes, true);
+    assertEquals(flags.fd_filestat_set_times, true);
   });
 
-  await t.step("pathSymlink", () => {
+  await t.step("path_symlink", () => {
     const flags = new Rights(1n << 24n);
-    assertEquals(flags.pathSymlink, true);
+    assertEquals(flags.path_symlink, true);
   });
 
-  await t.step("pathRemoveDirectory", () => {
+  await t.step("path_remove_directory", () => {
     const flags = new Rights(1n << 25n);
-    assertEquals(flags.pathRemoveDirectory, true);
+    assertEquals(flags.path_remove_directory, true);
   });
 
-  await t.step("pathUnlinkFile", () => {
+  await t.step("path_unlink_file", () => {
     const flags = new Rights(1n << 26n);
-    assertEquals(flags.pathUnlinkFile, true);
+    assertEquals(flags.path_unlink_file, true);
   });
 
-  await t.step("pollFdReadwrite", () => {
+  await t.step("poll_fd_readwrite", () => {
     const flags = new Rights(1n << 27n);
-    assertEquals(flags.pollFdReadwrite, true);
+    assertEquals(flags.poll_fd_readwrite, true);
   });
 
-  await t.step("sockShutdown", () => {
+  await t.step("sock_shutdown", () => {
     const flags = new Rights(1n << 28n);
-    assertEquals(flags.sockShutdown, true);
+    assertEquals(flags.sock_shutdown, true);
   });
 
-  await t.step("sockAccept", () => {
+  await t.step("sock_accept", () => {
     const flags = new Rights(1n << 29n);
-    assertEquals(flags.sockAccept, true);
+    assertEquals(flags.sock_accept, true);
+  });
+});
+
+Deno.test("filetype", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Filetype);
+    const data = new DataView(memory.buffer);
+    data.setUint8(pointer, Filetype.character_device);
+
+    assertEquals(
+      Filetype.cast(memory, pointer),
+      new Filetype(Filetype.character_device),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Filetype);
+
+    const filetype = new Filetype(100);
+    filetype.store(memory, pointer);
+    assertEquals(
+      new Uint8Array(memory.buffer, pointer, 8),
+      new Uint8Array([100, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("fdstat", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Fdstat);
+    const offset = 8;
+    const data = new DataView(memory.buffer);
+    data.setUint8(addOffset(pointer, offset), Filetype.character_device);
+    data.setUint16(addOffset(pointer, offset + 2), Fdflags.nonblock, true);
+    data.setBigUint64(addOffset(pointer, offset + 8), Rights.fd_write, true);
+    data.setBigUint64(addOffset(pointer, offset + 16), Rights.fd_write, true);
+
+    assertEquals(
+      Fdstat.cast(memory, pointer, offset),
+      new Fdstat({
+        fs_filetype: new Filetype(Filetype.character_device),
+        fs_flags: new Fdflags(Fdflags.nonblock),
+        fs_rights_base: new Rights(Rights.fd_write),
+        fs_rights_inheriting: new Rights(Rights.fd_write),
+      }),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Fdstat);
+    const offset = 8;
+
+    const fdstat = new Fdstat({
+      fs_filetype: new Filetype(Filetype.character_device),
+      fs_flags: new Fdflags(Fdflags.nonblock),
+      fs_rights_base: new Rights(Rights.fd_write),
+      fs_rights_inheriting: new Rights(Rights.fd_write),
+    });
+    fdstat.store(memory, pointer, offset);
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), 24 * 8),
+      new Uint8Array([
+        // fs_filetype
+        ...[2, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        // fd_flags,
+        ...[4, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        // fs_rights_base
+        ...[64, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        // fs_rights_inheriting
+        ...[64, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+        ...[0, 0, 0, 0, 0, 0, 0, 0],
+      ]),
+    );
   });
 });

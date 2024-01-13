@@ -1,6 +1,29 @@
-// errno: Variant
-//
-// Error codes returned by functions. Not all of these error codes are returned by the functions provided by this API; some are used in higher-level library layers, and others are provided merely for alignment with POSIX.
+export type Pointer<_> = number;
+
+type Offset = number;
+
+export type Value<_> = number;
+
+export type BigValue<_> = bigint;
+
+const addOffset = <T>(ptr: Pointer<T>, offset: Offset): Pointer<T> =>
+  ptr + (offset * 8);
+
+export type U8 = number;
+
+export type Size = number;
+
+export type Fd = number;
+
+export const Fd = {
+  Stdin: 0,
+  Stdout: 1,
+  Stderr: 2,
+};
+
+// Error codes returned by functions. Not all of these error codes are returned
+// by the functions provided by this API; some are used in higher-level library
+// layers, and others are provided merely for alignment with POSIX.
 export enum Errno {
   // success No error occurred. System call completed successfully.
   Success,
@@ -158,301 +181,428 @@ export enum Errno {
   Notcapable,
 }
 
-// 8 bits
-export enum Filetype {
-  // unknown The type of the file descriptor or file is unknown or is different from any of the other types specified.
-  Unknown,
-  // block_device The file descriptor or file refers to a block device inode.
-  BlockDevice,
-  // character_device The file descriptor or file refers to a character device inode.
-  CharacterDevice,
-  // directory The file descriptor or file refers to a directory inode.
-  Directory,
-  // regular_file The file descriptor or file refers to a regular file inode.
-  RegularFile,
-  // socket_dgram The file descriptor or file refers to a datagram socket.
-  SocketDgram,
-  // socket_stream The file descriptor or file refers to a byte-stream socket.
-  SocketStream,
-  // symbolic_link The file refers to a symbolic link inode.
-  SymbolicLink,
-}
+// The type of a file descriptor or file.
+export class Filetype {
+  static readonly size = 1;
+  static readonly alignment = 1;
 
-// fdflags: Record
-//
-// File descriptor flags.
-export class Fdflags {
-  readonly size = 2;
   constructor(
-    private readonly flags: number,
+    private readonly value: Value<Filetype>,
   ) {}
 
-  static cast(mem: WebAssembly.Memory, ptr: Pointer<Fdflags>): Fdflags {
-    const data = new DataView(mem.buffer);
-    return new Fdflags(
-      data.getUint16(ptr, true),
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Filetype>,
+    offset: Offset = 0,
+  ): Filetype {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    return new Filetype(
+      data.getUint8(0),
     );
   }
 
-  static readonly append = 1;
-  static readonly dsync = 2;
-  static readonly nonblock = 4;
-  static readonly rsync = 8;
-  static readonly sync = 16;
+  store(mem: WebAssembly.Memory, ptr: Pointer<Filetype>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    data.setUint8(0, this.value);
+  }
+
+  // The type of the file descriptor or file is unknown or is different from any of the other types specified.
+  static readonly unknown = 0;
+
+  // The file descriptor or file refers to a block device inode.
+  static readonly block_device = 1;
+
+  // The file descriptor or file refers to a character device inode.
+  static readonly character_device = 2;
+
+  // The file descriptor or file refers to a directory inode.
+  static readonly directory = 3;
+
+  // The file descriptor or file refers to a regular file inode.
+  static readonly regular_file = 4;
+
+  // The file descriptor or file refers to a datagram socket.
+  static readonly socket_dgram = 5;
+
+  // The file descriptor or file refers to a byte-stream socket.
+  static readonly socket_stream = 6;
+
+  // The file refers to a symbolic link inode.
+  static readonly symbolic_link = 7;
+}
+
+// File descriptor flags.
+export class Fdflags {
+  static readonly size = 2;
+  static readonly alignment = 2;
+
+  constructor(
+    private readonly flags: Value<Fdflags>,
+  ) {}
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Fdflags>,
+    offset: Offset = 0,
+  ): Fdflags {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    return new Fdflags(
+      data.getUint16(0, true),
+    );
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Fdflags>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    data.setUint16(0, this.flags, true);
+  }
 
   // Append mode: Data written to the file is always appended to the file's end.
+  static readonly append = 1;
+
   get append(): boolean {
     return (this.flags & Fdflags.append) > 0;
   }
 
-  // Write according to synchronized I/O data integrity completion. Only the data stored in the file is synchronized.
+  // Write according to synchronized I/O data integrity completion. Only the
+  // data stored in the file is synchronized.
+  static readonly dsync = 2;
+
   get dsync(): boolean {
     return (this.flags & Fdflags.dsync) > 0;
   }
 
   // Non-blocking mode
+  static readonly nonblock = 4;
+
   get nonblock(): boolean {
     return (this.flags & Fdflags.nonblock) > 0;
   }
 
   // Synchronized read I/O operations.
+  static readonly rsync = 8;
+
   get rsync(): boolean {
     return (this.flags & Fdflags.rsync) > 0;
   }
 
-  // Write according to synchronized I/O file integrity completion. In addition to synchronizing the data stored in the file, the implementation may also synchronously update the file's metadata.
+  // Write according to synchronized I/O file integrity completion. In addition
+  // to synchronizing the data stored in the file, the implementation may also
+  // synchronously update the file's metadata.
+  static readonly sync = 16;
+
   get sync(): boolean {
     return (this.flags & Fdflags.sync) > 0;
   }
 }
 
-// 64 bits
-
+// File descriptor rights, determining which actions may be performed.
 export class Rights {
-  readonly size = 8;
+  static readonly size = 8;
+  static readonly alignment = 8;
+
   constructor(
-    private readonly flags: bigint,
+    private readonly flags: BigValue<Rights>,
   ) {}
 
-  static readonly fdDatasync = 1n << 0n;
-  static readonly fdRead = 1n << 1n;
-  static readonly fdSeek = 1n << 2n;
-  static readonly fdFdstatSetFlags = 1n << 3n;
-  static readonly fdSync = 1n << 4n;
-  static readonly fdTell = 1n << 5n;
-  static readonly fdWrite = 1n << 6n;
-  static readonly fdAdvise = 1n << 7n;
-  static readonly fdAllocate = 1n << 8n;
-  static readonly pathCreateDirectory = 1n << 9n;
-  static readonly pathCreateFile = 1n << 10n;
-  static readonly pathLinkSource = 1n << 11n;
-  static readonly pathLinkTarget = 1n << 12n;
-  static readonly pathOpen = 1n << 13n;
-  static readonly fdReaddir = 1n << 14n;
-  static readonly pathReadlink = 1n << 15n;
-  static readonly pathRenameSource = 1n << 16n;
-  static readonly pathRenameTarget = 1n << 17n;
-  static readonly pathFilestatGet = 1n << 18n;
-  static readonly pathFilestatSetSize = 1n << 19n;
-  static readonly pathFilestatSetTimes = 1n << 20n;
-  static readonly fdFilestatGet = 1n << 21n;
-  static readonly fdFilestatSetSize = 1n << 22n;
-  static readonly fdFilestatSetTimes = 1n << 23n;
-  static readonly pathSymlink = 1n << 24n;
-  static readonly pathRemoveDirectory = 1n << 25n;
-  static readonly pathUnlinkFile = 1n << 26n;
-  static readonly pollFdReadwrite = 1n << 27n;
-  static readonly sockShutdown = 1n << 28n;
-  static readonly sockAccept = 1n << 29n;
-
-  static cast(mem: WebAssembly.Memory, ptr: Pointer<Rights>): Rights {
-    const data = new DataView(mem.buffer);
-    return new Rights(data.getBigUint64(ptr, true));
+  static no(): Rights {
+    return new Rights(0n);
   }
 
-  // The right to invoke fd_datasync. If path_open is set, includes the right to invoke path_open with fdflags::dsync.
-  get fdDatasync(): boolean {
-    return (this.flags & Rights.fdDatasync) > 0n;
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Rights>,
+    offset: Offset = 0,
+  ): Rights {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    return new Rights(data.getBigUint64(0, true));
   }
 
-  // The right to invoke fd_read and sock_recv. If rights::fd_seek is set, includes the right to invoke fd_pread.
-  get fdRead(): boolean {
-    return (this.flags & Rights.fdRead) > 0n;
+  store(mem: WebAssembly.Memory, ptr: Pointer<Rights>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    data.setBigUint64(0, this.flags, true);
+  }
+
+  // The right to invoke fd_datasync. If path_open is set, includes the right to
+  // invoke path_open with fdflags::dsync.
+  static readonly fd_datasync = 1n << 0n;
+
+  get fd_datasync(): boolean {
+    return (this.flags & Rights.fd_datasync) > 0n;
+  }
+
+  // The right to invoke fd_read and sock_recv. If rights::fd_seek is set,
+  // includes the right to invoke fd_pread.
+  static readonly fd_read = 1n << 1n;
+
+  get fd_read(): boolean {
+    return (this.flags & Rights.fd_read) > 0n;
   }
 
   // The right to invoke fd_seek. This flag implies rights::fd_tell.
-  get fdSeek(): boolean {
-    return (this.flags & Rights.fdSeek) > 0n;
+  static readonly fd_seek = 1n << 2n;
+
+  get fd_seek(): boolean {
+    return (this.flags & Rights.fd_seek) > 0n;
   }
 
   // The right to invoke fd_fdstat_set_flags.
-  get fdFdstatSetFlags(): boolean {
-    return (this.flags & Rights.fdFdstatSetFlags) > 0n;
+  static readonly fd_fdstat_set_flags = 1n << 3n;
+
+  get fd_fdstat_set_flags(): boolean {
+    return (this.flags & Rights.fd_fdstat_set_flags) > 0n;
   }
 
-  // The right to invoke fd_sync. If path_open is set, includes the right to invoke path_open with fdflags::rsync and fdflags::dsync.
-  get fdSync(): boolean {
-    return (this.flags & Rights.fdSync) > 0n;
+  // The right to invoke fd_sync. If path_open is set, includes the right to
+  // invoke path_open with fdflags::rsync and fdflags::dsync.
+  static readonly fd_sync = 1n << 4n;
+
+  get fd_sync(): boolean {
+    return (this.flags & Rights.fd_sync) > 0n;
   }
 
-  // The right to invoke fd_seek in such a way that the file offset remains unaltered (i.e., whence::cur with offset zero), or to invoke fd_tell.
-  get fdTell(): boolean {
-    return (this.flags & Rights.fdTell) > 0n;
+  // The right to invoke fd_seek in such a way that the file offset remains
+  // unaltered (i.e., whence::cur with offset zero), or to invoke fd_tell.
+  static readonly fd_tell = 1n << 5n;
+
+  get fd_tell(): boolean {
+    return (this.flags & Rights.fd_tell) > 0n;
   }
 
-  // The right to invoke fd_write and sock_send. If rights::fd_seek is set, includes the right to invoke fd_pwrite.
-  get fdWrite(): boolean {
-    return (this.flags & Rights.fdWrite) > 0n;
+  // The right to invoke fd_write and sock_send. If rights::fd_seek is set,
+  // includes the right to invoke fd_pwrite.
+  static readonly fd_write = 1n << 6n;
+
+  get fd_write(): boolean {
+    return (this.flags & Rights.fd_write) > 0n;
   }
 
   // The right to invoke fd_advise.
-  get fdAdvise(): boolean {
-    return (this.flags & Rights.fdAdvise) > 0n;
+  static readonly fd_advise = 1n << 7n;
+
+  get fd_advise(): boolean {
+    return (this.flags & Rights.fd_advise) > 0n;
   }
 
   // The right to invoke fd_allocate.
-  get fdAllocate(): boolean {
-    return (this.flags & Rights.fdAllocate) > 0n;
+  static readonly fd_allocate = 1n << 8n;
+
+  get fd_allocate(): boolean {
+    return (this.flags & Rights.fd_allocate) > 0n;
   }
 
   // The right to invoke path_create_directory.
-  get pathCreateDirectory(): boolean {
-    return (this.flags & Rights.pathCreateDirectory) > 0n;
+  static readonly path_create_directory = 1n << 9n;
+
+  get path_create_directory(): boolean {
+    return (this.flags & Rights.path_create_directory) > 0n;
   }
 
   // If path_open is set, the right to invoke path_open with oflags::creat.
-  get pathCreateFile(): boolean {
-    return (this.flags & Rights.pathCreateFile) > 0n;
+  static readonly path_create_file = 1n << 10n;
+
+  get path_create_file(): boolean {
+    return (this.flags & Rights.path_create_file) > 0n;
   }
 
-  // The right to invoke path_link with the file descriptor as the source directory.
-  get pathLinkSource(): boolean {
-    return (this.flags & Rights.pathLinkSource) > 0n;
+  // The right to invoke path_link with the file descriptor as the source
+  // directory.
+  static readonly path_link_source = 1n << 11n;
+
+  get path_link_source(): boolean {
+    return (this.flags & Rights.path_link_source) > 0n;
   }
 
-  // The right to invoke path_link with the file descriptor as the target directory.
-  get pathLinkTarget(): boolean {
-    return (this.flags & Rights.pathLinkTarget) > 0n;
+  // The right to invoke path_link with the file descriptor as the target
+  // directory.
+  static readonly path_link_target = 1n << 12n;
+
+  get path_link_target(): boolean {
+    return (this.flags & Rights.path_link_target) > 0n;
   }
 
   // The right to invoke path_open.
-  get pathOpen(): boolean {
-    return (this.flags & Rights.pathOpen) > 0n;
+  static readonly path_open = 1n << 13n;
+
+  get path_open(): boolean {
+    return (this.flags & Rights.path_open) > 0n;
   }
 
   // The right to invoke fd_readdir.
-  get fdReaddir(): boolean {
-    return (this.flags & Rights.fdReaddir) > 0n;
+  static readonly fd_readdir = 1n << 14n;
+  get fd_readdir(): boolean {
+    return (this.flags & Rights.fd_readdir) > 0n;
   }
 
   // The right to invoke path_readlink.
-  get pathReadlink(): boolean {
-    return (this.flags & Rights.pathReadlink) > 0n;
+  static readonly path_readlink = 1n << 15n;
+
+  get path_readlink(): boolean {
+    return (this.flags & Rights.path_readlink) > 0n;
   }
 
-  // The right to invoke path_rename with the file descriptor as the source directory.
-  get pathRenameSource(): boolean {
-    return (this.flags & Rights.pathRenameSource) > 0n;
+  // The right to invoke path_rename with the file descriptor as the source
+  // directory.
+  static readonly path_rename_source = 1n << 16n;
+
+  get path_rename_source(): boolean {
+    return (this.flags & Rights.path_rename_source) > 0n;
   }
 
-  // The right to invoke path_rename with the file descriptor as the target directory.
-  get pathRenameTarget(): boolean {
-    return (this.flags & Rights.pathRenameTarget) > 0n;
+  // The right to invoke path_rename with the file descriptor as the target
+  // directory.
+  static readonly path_rename_target = 1n << 17n;
+
+  get path_rename_target(): boolean {
+    return (this.flags & Rights.path_rename_target) > 0n;
   }
 
   // The right to invoke path_filestat_get.
-  get pathFilestatGet(): boolean {
-    return (this.flags & Rights.pathFilestatGet) > 0n;
+  static readonly path_filestat_get = 1n << 18n;
+
+  get path_filestat_get(): boolean {
+    return (this.flags & Rights.path_filestat_get) > 0n;
   }
 
-  // The right to change a file's size. If path_open is set, includes the right to invoke path_open with oflags::trunc. Note: there is no function named path_filestat_set_size. This follows POSIX design, which only has ftruncate and does not provide ftruncateat. While such function would be desirable from the API design perspective, there are virtually no use cases for it since no code written for POSIX systems would use it. Moreover, implementing it would require multiple syscalls, leading to inferior performance.
-  get pathFilestatSetSize(): boolean {
-    return (this.flags & Rights.pathFilestatSetSize) > 0n;
+  // The right to change a file's size. If path_open is set, includes the right
+  // to invoke path_open with oflags::trunc. Note: there is no function named
+  // path_filestat_set_size. This follows POSIX design, which only has ftruncate
+  // and does not provide ftruncateat. While such function would be desirable
+  // from the API design perspective, there are virtually no use cases for it
+  // since no code written for POSIX systems would use it. Moreover,
+  // implementing it would require multiple syscalls, leading to inferior
+  // performance.
+  static readonly path_filestat_set_size = 1n << 19n;
+
+  get path_filestat_set_size(): boolean {
+    return (this.flags & Rights.path_filestat_set_size) > 0n;
   }
 
   // The right to invoke path_filestat_set_times.
-  get pathFilestatSetTimes(): boolean {
-    return (this.flags & Rights.pathFilestatSetTimes) > 0n;
+  static readonly path_filestat_set_times = 1n << 20n;
+  get path_filestat_set_times(): boolean {
+    return (this.flags & Rights.path_filestat_set_times) > 0n;
   }
 
   // The right to invoke fd_filestat_get.
-  get fdFilestatGet(): boolean {
-    return (this.flags & Rights.fdFilestatGet) > 0n;
+  static readonly fd_filestat_get = 1n << 21n;
+
+  get fd_filestat_get(): boolean {
+    return (this.flags & Rights.fd_filestat_get) > 0n;
   }
 
   // The right to invoke fd_filestat_set_size.
-  get fdFilestatSetSize(): boolean {
-    return (this.flags & Rights.fdFilestatSetSize) > 0n;
+  static readonly fd_filestat_set_size = 1n << 22n;
+
+  get fd_filestat_set_size(): boolean {
+    return (this.flags & Rights.fd_filestat_set_size) > 0n;
   }
 
   // The right to invoke fd_filestat_set_times.
-  get fdFilestatSetTimes(): boolean {
-    return (this.flags & Rights.fdFilestatSetTimes) > 0n;
+  static readonly fd_filestat_set_times = 1n << 23n;
+
+  get fd_filestat_set_times(): boolean {
+    return (this.flags & Rights.fd_filestat_set_times) > 0n;
   }
 
   // The right to invoke path_symlink.
-  get pathSymlink(): boolean {
-    return (this.flags & Rights.pathSymlink) > 0n;
+  static readonly path_symlink = 1n << 24n;
+
+  get path_symlink(): boolean {
+    return (this.flags & Rights.path_symlink) > 0n;
   }
 
   // The right to invoke path_remove_directory.
-  get pathRemoveDirectory(): boolean {
-    return (this.flags & Rights.pathRemoveDirectory) > 0n;
+  static readonly path_remove_directory = 1n << 25n;
+
+  get path_remove_directory(): boolean {
+    return (this.flags & Rights.path_remove_directory) > 0n;
   }
 
   // The right to invoke path_unlink_file.
-  get pathUnlinkFile(): boolean {
-    return (this.flags & Rights.pathUnlinkFile) > 0n;
+  static readonly path_unlink_file = 1n << 26n;
+
+  get path_unlink_file(): boolean {
+    return (this.flags & Rights.path_unlink_file) > 0n;
   }
 
-  // If rights::fd_read is set, includes the right to invoke poll_oneoff to subscribe to eventtype::fd_read. If rights::fd_write is set, includes the right to invoke poll_oneoff to subscribe to eventtype::fd_write.
-  get pollFdReadwrite(): boolean {
-    return (this.flags & Rights.pollFdReadwrite) > 0n;
+  // If rights::fd_read is set, includes the right to invoke poll_oneoff to
+  // subscribe to eventtype::fd_read. If rights::fd_write is set, includes the
+  // right to invoke poll_oneoff to subscribe to eventtype::fd_write.
+  static readonly poll_fd_readwrite = 1n << 27n;
+
+  get poll_fd_readwrite(): boolean {
+    return (this.flags & Rights.poll_fd_readwrite) > 0n;
   }
 
   // The right to invoke sock_shutdown.
-  get sockShutdown(): boolean {
-    return (this.flags & Rights.sockShutdown) > 0n;
+  static readonly sock_shutdown = 1n << 28n;
+
+  get sock_shutdown(): boolean {
+    return (this.flags & Rights.sock_shutdown) > 0n;
   }
 
   // The right to invoke sock_accept.
-  get sockAccept(): boolean {
-    return (this.flags & Rights.sockAccept) > 0n;
+  static readonly sock_accept = 1n << 29n;
+
+  get sock_accept(): boolean {
+    return (this.flags & Rights.sock_accept) > 0n;
   }
 }
 
-export class Fdstat {
-  readonly size = 24;
-  constructor(
-    readonly fsFiletype: Filetype,
-    readonly fsFlags: Fdflags,
-    readonly fsRightsBase: Rights,
-    readonly fsRightsInheriting: Rights,
-  ) {}
-
-  static cast(mem: WebAssembly.Memory, ptr: Pointer<Fdstat>): Fdstat {
-    const data = new DataView(mem.buffer);
-    return new Fdstat(
-      data.getUint8(ptr),
-      Fdflags.cast(mem, ptr + 2),
-      Rights.cast(mem, ptr + 8),
-      Rights.cast(mem, ptr + 16),
-    );
-  }
-}
-export type Pointer<_> = number;
-
-export type U8 = number;
-
-export type Size = number;
-
-export type Fd = number;
-
-export const Fd = {
-  Stdin: 0,
-  Stdout: 1,
-  Stderr: 2,
+type InitFdstat = {
+  readonly fs_filetype: Filetype;
+  readonly fs_flags: Fdflags;
+  readonly fs_rights_base: Rights;
+  readonly fs_rights_inheriting: Rights;
 };
+
+// File descriptor attributes.
+export class Fdstat {
+  static readonly size = 24;
+  static readonly alignment = 8;
+
+  // File type.
+  readonly fs_filetype: Filetype;
+  // File descriptor flags.
+  readonly fs_flags: Fdflags;
+  // Rights that apply to this file descriptor.
+  readonly fs_rights_base: Rights;
+  // Maximum set of rights that may be installed on new file descriptors that
+  // are created through this file descriptor, e.g., through path_open.
+  readonly fs_rights_inheriting: Rights;
+
+  constructor({
+    fs_filetype,
+    fs_flags,
+    fs_rights_base,
+    fs_rights_inheriting,
+  }: InitFdstat) {
+    this.fs_filetype = fs_filetype;
+    this.fs_flags = fs_flags;
+    this.fs_rights_base = fs_rights_base;
+    this.fs_rights_inheriting = fs_rights_inheriting;
+  }
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Fdstat>,
+    offset: Offset = 0,
+  ): Fdstat {
+    return new Fdstat({
+      fs_filetype: Filetype.cast(mem, ptr, offset),
+      fs_flags: Fdflags.cast(mem, ptr, offset + 2),
+      fs_rights_base: Rights.cast(mem, ptr, offset + 8),
+      fs_rights_inheriting: Rights.cast(mem, ptr, offset + 16),
+    });
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Fdstat>, offset: Offset = 0) {
+    this.fs_filetype.store(mem, ptr, offset);
+    this.fs_flags.store(mem, ptr, offset + 2);
+    this.fs_rights_base.store(mem, ptr, offset + 8);
+    this.fs_rights_inheriting.store(mem, ptr, offset + 16);
+  }
+}
 
 export type Exitcode = number;
 

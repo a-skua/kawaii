@@ -9,13 +9,16 @@ import {
   Fdstat,
   Filesize,
   Filestat,
+  Filetype,
   Iovec,
   Pointer,
   Prestat,
+  Rights,
   Size,
   Subscription,
   Timestamp,
   U8,
+  Value,
 } from "./type.ts";
 
 let memory: WebAssembly.Memory;
@@ -107,7 +110,8 @@ export function args_sizes_get(
 
 // clock_time_get(id: clockid, precision: timestamp) -> Result<timestamp, errno>
 //
-// Return the time value of a clock. Note: This is similar to clock_gettime in POSIX.
+// Return the time value of a clock. Note: This is similar to clock_gettime in
+// POSIX.
 export function clock_time_get(
   id: Clockid,
   _precision: Timestamp,
@@ -132,7 +136,9 @@ export function clock_time_get(
 
 // environ_get(environ: Pointer<Pointer<u8>>, environ_buf: Pointer<u8>) -> Result<(), errno>
 //
-// Read environment variable data. The sizes of the buffers should match that returned by environ_sizes_get. Key/value pairs are expected to be joined with =s, and terminated with \0s.
+// Read environment variable data. The sizes of the buffers should match that
+// returned by `environ_sizes_get`. Key/value pairs are expected to be joined
+// with `=`s, and terminated with `\0`s.
 export function environ_get(
   environ: Pointer<Pointer<U8>>,
   env_buf: Pointer<U8>,
@@ -172,7 +178,9 @@ export function environ_sizes_get(
 //
 // Write to a file descriptor. Note: This is similar to writev in POSIX.
 //
-// Like POSIX, any calls of write (and other functions to read or write) for a regular file by other threads in the WASI process should not be interleaved while write is executed.
+// Like POSIX, any calls of write (and other functions to read or write) for a
+// regular file by other threads in the WASI process should not be interleaved
+// while write is executed.
 export function fd_write(
   fd: Fd,
   iovs: Pointer<Ciovec[]>,
@@ -209,7 +217,12 @@ export function fd_write(
 
 // random_get(buf: Pointer<u8>, buf_len: size) -> Result<(), errno>
 //
-// Write high-quality random data into a buffer. This function blocks when the implementation is unable to immediately provide sufficient high-quality random data. This function may execute slowly, so when large mounts of random data are required, it's advisable to use this function to seed a pseudo-random number generator, rather than to provide the random data directly.
+// Write high-quality random data into a buffer. This function blocks when the
+// implementation is unable to immediately provide sufficient high-quality
+// random data. This function may execute slowly, so when large mounts of random
+// data are required, it's advisable to use this function to seed a
+// pseudo-random number generator, rather than to provide the random data
+// directly.
 export function random_get(buf: Pointer<U8>, len: Size): Errno {
   crypto.getRandomValues(new Uint8Array(memory.buffer, buf, len));
   return Errno.Success;
@@ -247,7 +260,8 @@ export function fd_filestat_get(_fd: Fd, _result: Pointer<Filestat>): Errno {
 
 // fd_pread(fd: fd, iovs: iovec_array, offset: filesize) -> Result<size, errno>
 //
-// Read from a file descriptor, without using and updating the file descriptor's offset. Note: This is similar to preadv in Linux (and other Unix-es).
+// Read from a file descriptor, without using and updating the file descriptor's
+// offset. Note: This is similar to preadv in Linux (and other Unix-es).
 export function fd_pread(
   _fd: Fd,
   _iovs: Pointer<Iovec[]>,
@@ -259,8 +273,11 @@ export function fd_pread(
 
 // fd_pwrite(fd: fd, iovs: ciovec_array, offset: filesize) -> Result<size, errno>
 //
-// Write to a file descriptor, without using and updating the file descriptor's offset. Note: This is similar to pwritev in Linux (and other Unix-es).
-// Like Linux (and other Unix-es), any calls of pwrite (and other functions to read or write) for a regular file by other threads in the WASI process should not be interleaved while pwrite is executed.
+// Write to a file descriptor, without using and updating the file descriptor's
+// offset. Note: This is similar to pwritev in Linux (and other Unix-es).
+// Like Linux (and other Unix-es), any calls of pwrite (and other functions to
+// read or write) for a regular file by other threads in the WASI process should
+// not be interleaved while pwrite is executed.
 
 export function fd_pwrite(
   _fd: Fd,
@@ -282,18 +299,57 @@ export function fd_read(
   return Errno.Nosys;
 }
 
+const fdstats = [
+  // stdin
+  new Fdstat({
+    fs_filetype: new Filetype(Filetype.character_device),
+    fs_flags: new Fdflags(Fdflags.nonblock),
+    fs_rights_base: Rights.no(),
+    fs_rights_inheriting: Rights.no(),
+  }),
+  // stdout
+  new Fdstat({
+    fs_filetype: new Filetype(Filetype.character_device),
+    fs_flags: new Fdflags(Fdflags.nonblock),
+    fs_rights_base: new Rights(Rights.fd_write),
+    fs_rights_inheriting: new Rights(Rights.fd_write),
+  }),
+  // stderr
+  new Fdstat({
+    fs_filetype: new Filetype(Filetype.character_device),
+    fs_flags: new Fdflags(Fdflags.nonblock),
+    fs_rights_base: new Rights(Rights.fd_write),
+    fs_rights_inheriting: new Rights(Rights.fd_write),
+  }),
+];
+
 // fd_fdstat_get(fd: fd) -> Result<fdstat, errno>
 //
-// Get the attributes of a file descriptor. Note: This returns similar flags to fcntl(fd, F_GETFL) in POSIX, as well as additional fields.
-function fd_fdstat_get(_fd: Fd, _result: Pointer<Fdstat>): Errno {
-  return Errno.Nosys;
+// Get the attributes of a file descriptor. Note: This returns similar flags
+// to fcntl(fd, F_GETFL) in POSIX, as well as additional fields.
+export function fd_fdstat_get(fd: Fd, result: Pointer<Fdstat>): Errno {
+  if (!fdstats[fd]) {
+    return Errno.Badf;
+  }
+
+  fdstats[fd].store(memory, result);
+  return Errno.Success;
 }
 
 // fd_fdstat_set_flags(fd: fd, flags: fdflags) -> Result<(), errno>
 //
-// Adjust the flags associated with a file descriptor. Note: This is similar to fcntl(fd, F_SETFL, flags) in POSIX.
-function fd_fdstat_set_flags(_fd: Fd, _flags: Fdflags): Errno {
-  return Errno.Nosys;
+// Adjust the flags associated with a file descriptor. Note: This is similar
+// to fcntl(fd, F_SETFL, flags) in POSIX.
+export function fd_fdstat_set_flags(fd: Fd, flags: Value<Fdflags>): Errno {
+  if (!fdstats[fd]) {
+    return Errno.Badf;
+  }
+
+  fdstats[fd] = new Fdstat({
+    ...fdstats[fd],
+    fs_flags: new Fdflags(flags),
+  });
+  return Errno.Success;
 }
 
 // fd_prestat_get(fd: fd) -> Result<prestat, errno>

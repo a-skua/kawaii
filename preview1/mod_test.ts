@@ -2,7 +2,15 @@ import {
   assert,
   assertEquals,
 } from "https://deno.land/std@0.204.0/assert/mod.ts";
-import { Clockid, Errno, Fd } from "./type.ts";
+import {
+  Clockid,
+  Errno,
+  Fd,
+  Fdflags,
+  Fdstat,
+  Filetype,
+  Rights,
+} from "./type.ts";
 import init, {
   Arg,
   args_get,
@@ -12,12 +20,23 @@ import init, {
   environ_get,
   environ_sizes_get,
   Exit,
+  fd_fdstat_get,
+  fd_fdstat_set_flags,
   fd_write,
   poll_oneoff,
   proc_exit,
   random_get,
   sched_yield,
 } from "./mod.ts";
+
+interface DataType {
+  alignment: number;
+}
+
+const randomPointer = ({ alignment }: DataType): number => {
+  const random = Math.floor(Math.random() * (1024 / alignment));
+  return random * alignment;
+};
 
 Deno.test(Arg.name, () => {
   const arg = new Arg("foo");
@@ -224,5 +243,110 @@ Deno.test(poll_oneoff.name, async (t) => {
 
   await t.step("normal", () => {
     assertEquals(Errno[poll_oneoff(0, 0, 1, 0)], Errno[Errno.Notsup]);
+  });
+});
+
+Deno.test("fd_fdstat_get", async (t) => {
+  await t.step("stdin", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const pointer = randomPointer(Fdstat);
+    assertEquals(Errno[fd_fdstat_get(Fd.Stdin, pointer)], Errno[Errno.Success]);
+    assertEquals(
+      Fdstat.cast(memory, pointer),
+      new Fdstat({
+        fs_filetype: new Filetype(Filetype.character_device),
+        fs_flags: new Fdflags(Fdflags.nonblock),
+        fs_rights_base: Rights.no(),
+        fs_rights_inheriting: Rights.no(),
+      }),
+    );
+  });
+
+  await t.step("stdout", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const pointer = randomPointer(Fdstat);
+    assertEquals(
+      Errno[fd_fdstat_get(Fd.Stdout, pointer)],
+      Errno[Errno.Success],
+    );
+    assertEquals(
+      Fdstat.cast(memory, pointer),
+      new Fdstat({
+        fs_filetype: new Filetype(Filetype.character_device),
+        fs_flags: new Fdflags(Fdflags.nonblock),
+        fs_rights_base: new Rights(Rights.fd_write),
+        fs_rights_inheriting: new Rights(Rights.fd_write),
+      }),
+    );
+  });
+
+  await t.step("stderr", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const pointer = randomPointer(Fdstat);
+    assertEquals(
+      Errno[fd_fdstat_get(Fd.Stderr, pointer)],
+      Errno[Errno.Success],
+    );
+    assertEquals(
+      Fdstat.cast(memory, pointer),
+      new Fdstat({
+        fs_filetype: new Filetype(Filetype.character_device),
+        fs_flags: new Fdflags(Fdflags.nonblock),
+        fs_rights_base: new Rights(Rights.fd_write),
+        fs_rights_inheriting: new Rights(Rights.fd_write),
+      }),
+    );
+  });
+
+  await t.step("undefined", () => {
+    const pointer = randomPointer(Fdstat);
+    assertEquals(Errno[fd_fdstat_get(3, pointer)], Errno[Errno.Badf]);
+  });
+});
+
+Deno.test("fd_fdstat_set_flags", async (t) => {
+  await t.step("stdin", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      Errno[fd_fdstat_set_flags(Fd.Stdin, Fdflags.nonblock)],
+      Errno[Errno.Success],
+    );
+  });
+
+  await t.step("stdout", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      Errno[fd_fdstat_set_flags(Fd.Stdout, Fdflags.nonblock)],
+      Errno[Errno.Success],
+    );
+  });
+
+  await t.step("stderr", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      Errno[fd_fdstat_set_flags(Fd.Stderr, Fdflags.nonblock)],
+      Errno[Errno.Success],
+    );
+  });
+  await t.step("undefined", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      Errno[fd_fdstat_set_flags(3, Fdflags.nonblock)],
+      Errno[Errno.Badf],
+    );
   });
 });
