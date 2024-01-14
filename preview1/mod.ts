@@ -5,6 +5,7 @@ import {
   Clockid,
   Errno,
   Event,
+  EventFdReadwrite,
   Exitcode,
   Fd,
   Fdflags,
@@ -65,14 +66,17 @@ export function sched_yield(): Value<Errno> {
 
 // proc_exit(rval: exitcode)
 //
-// Terminate the process normally. An exit code of 0 indicates successful termination of the program. The meanings of other values is dependent on the environment.
+// Terminate the process normally. An exit code of 0 indicates successful
+// termination of the program. The meanings of other values is dependent on the
+// environment.
 export function proc_exit(rval: Value<Exitcode>) {
   throw new Exit(new Exitcode(rval));
 }
 
 // args_get(argv: Pointer<Pointer<u8>>, argv_buf: Pointer<u8>) -> Result<(), errno>
 //
-// Read command-line argument data. The size of the array should match that returned by args_sizes_get. Each argument is expected to be \0 terminated.
+// Read command-line argument data. The size of the array should match that
+// returned by args_sizes_get. Each argument is expected to be \0 terminated.
 export function args_get(
   argv: Pointer<Pointer<U8>>,
   argv_buf: Pointer<U8>,
@@ -82,12 +86,12 @@ export function args_get(
 
   for (const arg of args) {
     data.setUint32(argv, argv_buf, true);
-    argv = Pointer(argv + 4);
+    argv = argv + 4 as Pointer<Pointer<U8>>;
     const { written } = encoder.encodeInto(
       `${arg}\0`,
       array.subarray(argv_buf),
     );
-    argv_buf = Pointer(argv_buf + written);
+    argv_buf = argv_buf + written as Pointer<U8>;
   }
   return Errno.success;
 }
@@ -119,20 +123,21 @@ export function clock_time_get(
   _precision: BigValue<Timestamp>,
   result: Pointer<Timestamp>,
 ): Value<Errno> {
-  const data = new DataView(memory.buffer);
-  switch (id) {
-    case Clockid.realtime: {
-      const ns = BigInt(new Date().getTime()) * 1_000_000n;
-      data.setBigUint64(result, ns, true);
-      return Errno.success;
-    }
-    case Clockid.monotonic: {
-      const ns = BigInt(performance.now()) * 1_000_000n;
-      data.setBigUint64(result, ns, true);
-      return Errno.success;
-    }
-    default:
-      return Errno.notsup;
+  const clockid = new Clockid(id);
+  if (clockid.realtime) {
+    const ns = new Timestamp(
+      BigInt(new Date().getTime()) * 1_000_000n as BigValue<Timestamp>,
+    );
+    ns.store(memory, result);
+    return Errno.success;
+  } else if (clockid.monotonic) {
+    const ns = new Timestamp(
+      BigInt(performance.now()) * 1_000_000n as BigValue<Timestamp>,
+    );
+    ns.store(memory, result);
+    return Errno.success;
+  } else {
+    return Errno.notsup;
   }
 }
 
@@ -145,15 +150,16 @@ export function environ_get(
   environ: Pointer<Pointer<U8>>,
   env_buf: Pointer<U8>,
 ): Value<Errno> {
-  const data = new DataView(memory.buffer);
   const array = new Uint8Array(memory.buffer);
 
-  for (const env of envs) {
-    data.setUint32(environ, env_buf, true);
-    environ = Pointer(environ + 4);
+  for (let i = 0; i < envs.length; i += 1) {
+    Pointer.store(env_buf, memory, environ, Pointer.size * i);
 
-    const { written } = encoder.encodeInto(`${env}\0`, array.subarray(env_buf));
-    env_buf = Pointer(env_buf + written);
+    const { written } = encoder.encodeInto(
+      `${envs[i]}\0`,
+      array.subarray(env_buf),
+    );
+    env_buf = env_buf + written as Pointer<U8>;
   }
   return Errno.success;
 }
@@ -194,8 +200,7 @@ export function fd_write(
   let len = 0;
 
   for (let i = 0; i < iovs_size; i++) {
-    const iov = Ciovec.cast(memory, iovs);
-    iovs = Pointer(iovs + Ciovec.size);
+    const iov = Ciovec.cast(memory, iovs, Ciovec.size * i);
 
     str += decoder.decode(array.subarray(iov.buf, iov.buf + iov.len.value));
     len += iov.len.value;
@@ -235,15 +240,49 @@ export function random_get(buf: Pointer<U8>, len: Value<Size>): Value<Errno> {
 // Concurrently poll for the occurrence of a set of events.
 // If nsubscriptions is 0, returns errno::inval.
 export function poll_oneoff(
-  _in: Pointer<Subscription>,
-  _out: Pointer<Event>,
+  // The events to which to subscribe.
+  ins: Pointer<Subscription>,
+  // The events that have occurred.
+  out: Pointer<Event>,
+  // Both the number of subscriptions and events.
   nsubscriptions: Value<Size>,
-  _result: Pointer<Size>,
+  // The number of events stored.
+  result: Pointer<Size>,
 ): Value<Errno> {
   if (nsubscriptions === 0) {
     return Errno.inval;
   }
-  return Errno.notsup;
+
+  let count = 0;
+  for (let i = 0; i < nsubscriptions; i += 1) {
+    const subscription = Subscription.cast(memory, ins, Subscription.size * i);
+
+    if (subscription.u.type.clock) {
+      const event = new Event({
+        userdata: subscription.userdata,
+        error: new Errno(Errno.notsup), // TODO
+        type: subscription.u.type,
+        fd_readwrite: EventFdReadwrite.zero(),
+      });
+      event.store(memory, out);
+      count += 1;
+    } else if (subscription.u.type.fd_read || subscription.u.type.fd_write) {
+      const event = new Event({
+        userdata: subscription.userdata,
+        error: new Errno(Errno.notsup), // TODO
+        type: subscription.u.type,
+        fd_readwrite: EventFdReadwrite.zero(),
+      });
+      event.store(memory, out);
+      count += 1;
+    }
+    out = out + Event.size as Pointer<Event>;
+  }
+
+  const size = new Size(count as Value<Size>);
+  size.store(memory, result);
+
+  return Errno.success;
 }
 
 // fd_close(fd: fd) -> Result<(), errno>
@@ -309,8 +348,8 @@ const fdstats = [
   new Fdstat({
     fs_filetype: new Filetype(Filetype.character_device),
     fs_flags: new Fdflags(Fdflags.nonblock),
-    fs_rights_base: Rights.no(),
-    fs_rights_inheriting: Rights.no(),
+    fs_rights_base: Rights.zero(),
+    fs_rights_inheriting: Rights.zero(),
   }),
   // stdout
   new Fdstat({
@@ -350,6 +389,7 @@ export function fd_fdstat_get(
 // to fcntl(fd, F_SETFL, flags) in POSIX.
 export function fd_fdstat_set_flags(
   fd: Value<Fd>,
+  // The desired values of the file descriptor flags.
   flags: Value<Fdflags>,
 ): Value<Errno> {
   if (!fdstats[fd]) {
@@ -367,10 +407,10 @@ export function fd_fdstat_set_flags(
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_get(
-  _fd: Fd,
+  _fd: Value<Fd>,
   _result: Pointer<Prestat>,
 ): Value<Errno> {
-  return Errno.notsup;
+  return Errno.badf;
 }
 
 // fd_prestat_dir_name(fd: fd, path: Pointer<u8>, path_len: size) -> Result<(), errno>

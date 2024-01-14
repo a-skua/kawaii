@@ -1,17 +1,11 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
-
-var name = flag.String("name", "Your Name", "A name to say hello to.")
-
-func init() {
-	flag.Parse()
-}
 
 func isDebug() bool {
 	n, _ := strconv.Atoi(os.Getenv("DEBUG"))
@@ -22,5 +16,5 @@ func main() {
 	if isDebug() {
 		fmt.Println("Debug mode is on")
 	}
-	fmt.Printf("Hello, %s!\n", *name)
+	fmt.Printf("Hello, %s\n", strings.Join(os.Args[1:], " "))
 }

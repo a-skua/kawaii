@@ -11,27 +11,39 @@ export type Pointer<T extends Data<string>> = number & { __pointer: T } & {
   __data: string;
 };
 
-export const Pointer = <T extends Data<string>>(p: number): Pointer<T> =>
-  p as Pointer<T>;
-
 type Offset = number;
 
 const addOffset = <T extends Data<string>>(
   ptr: Pointer<T>,
   offset: Offset,
-): Pointer<T> => Pointer(ptr + offset);
+): Pointer<T> => (ptr + offset) as Pointer<T>;
+
+export const Pointer = Object.freeze({
+  size: 4,
+  cast: <T extends Data<string>>(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Pointer<T>>,
+    offset: Offset = 0,
+  ): Pointer<T> => {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Pointer.size);
+    return data.getUint32(0, true) as Pointer<T>;
+  },
+  store: <T extends Data<string>>(
+    value: Pointer<T>,
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Pointer<T>>,
+    offset: Offset = 0,
+  ) => {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Pointer.size);
+    data.setUint32(0, value, true);
+  },
+});
 
 // Value
 export type Value<T extends Data<string>> = number & { __value: T };
 
-export const Value = <T extends Data<string>>(v: number): Value<T> =>
-  v as Value<T>;
-
 // BigValue
 export type BigValue<T extends Data<string>> = bigint & { __bigValue: T };
-
-export const BigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
-  v as BigValue<T>;
 
 // U8
 export class U8 implements Data<"u8"> {
@@ -49,12 +61,12 @@ export class U8 implements Data<"u8"> {
     ptr: Pointer<U8>,
     offset: Offset = 0,
   ): U8 {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new U8(Value(data.getUint8(0)));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), U8.size);
+    return new U8(data.getUint8(0) as Value<U8>);
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<U8>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), U8.size);
     data.setUint8(0, this.value);
   }
 }
@@ -75,12 +87,12 @@ export class Size implements Data<"size"> {
     ptr: Pointer<Size>,
     offset: Offset = 0,
   ): Size {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new Size(Value(data.getUint32(0, true)));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Size.size);
+    return new Size(data.getUint32(0, true) as Value<Size>);
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Size>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Size.size);
     data.setUint32(0, this.value, true);
   }
 }
@@ -96,15 +108,32 @@ export class Filesize implements Data<"filesize"> {
     readonly value: BigValue<Filesize>,
   ) {}
 
+  static zero(): Filesize {
+    return new Filesize(0n as BigValue<Filesize>);
+  }
+
   static cast(
     mem: WebAssembly.Memory,
     ptr: Pointer<Filesize>,
     offset: Offset = 0,
   ): Filesize {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new Filesize(
-      BigValue(data.getBigUint64(0, true)),
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Filesize.size,
     );
+    return new Filesize(
+      data.getBigUint64(0, true) as BigValue<Filesize>,
+    );
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Filesize>, offset: Offset = 0) {
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Filesize.size,
+    );
+    data.setBigUint64(0, this.value, true);
   }
 }
 
@@ -124,12 +153,20 @@ export class Timestamp implements Data<"timestamp"> {
     ptr: Pointer<Timestamp>,
     offset: Offset = 0,
   ): Timestamp {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new Timestamp(BigValue(data.getBigUint64(0, true)));
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Timestamp.size,
+    );
+    return new Timestamp(data.getBigUint64(0, true) as BigValue<Timestamp>);
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Timestamp>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Timestamp.size,
+    );
     data.setBigUint64(0, this.value, true);
   }
 }
@@ -145,21 +182,53 @@ export class Clockid implements Data<"clockid"> {
     readonly value: Value<Clockid>,
   ) {}
 
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Clockid>,
+    offset: Offset = 0,
+  ): Clockid {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Clockid.size);
+    return new Clockid(
+      data.getUint32(0, true) as Value<Clockid>,
+    );
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Clockid>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Clockid.size);
+    data.setUint32(0, this.value, true);
+  }
+
   // The clock measuring real time. Time value zero corresponds with
   // 1970-01-01T00:00:00Z.
-  static readonly realtime: Value<Clockid> = Value(0);
+  static readonly realtime = 0 as Value<Clockid>;
+
+  get realtime(): boolean {
+    return this.value === Clockid.realtime;
+  }
 
   // The store-wide monotonic clock, which is defined as a clock measuring real
   // time, whose value cannot be adjusted and which cannot have negative clock
   // jumps. The epoch of this clock is undefined. The absolute time value of
   // this clock therefore has no meaning.
-  static readonly monotonic: Value<Clockid> = Value(1);
+  static readonly monotonic = 1 as Value<Clockid>;
+
+  get monotonic(): boolean {
+    return this.value === Clockid.monotonic;
+  }
 
   // The CPU-time clock associated with the current process.
-  static readonly process_cputime_id: Value<Clockid> = Value(2);
+  static readonly process_cputime_id = 2 as Value<Clockid>;
+
+  get process_cputime_id(): boolean {
+    return this.value === Clockid.process_cputime_id;
+  }
 
   // The CPU-time clock associated with the current thread.
-  static readonly thread_cputime_id: Value<Clockid> = Value(3);
+  static readonly thread_cputime_id = 3 as Value<Clockid>;
+
+  get thread_cputime_id(): boolean {
+    return this.value === Clockid.thread_cputime_id;
+  }
 }
 
 // Error codes returned by functions. Not all of these error codes are returned
@@ -180,8 +249,13 @@ export class Errno implements Data<"errno"> {
     ptr: Pointer<Errno>,
     offset: Offset = 0,
   ): Errno {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Errno.size);
     return new Errno(data.getUint16(0, true) as Value<Errno>);
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Errno>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Errno.size);
+    data.setUint16(0, this.value, true);
   }
 
   // No error occurred. System call completed successfully.
@@ -427,8 +501,8 @@ export class Rights implements Data<"rights"> {
     private readonly flags: BigValue<Rights>,
   ) {}
 
-  static no(): Rights {
-    return new Rights(BigValue(0n));
+  static zero(): Rights {
+    return new Rights(0n as BigValue<Rights>);
   }
 
   static cast(
@@ -436,18 +510,18 @@ export class Rights implements Data<"rights"> {
     ptr: Pointer<Rights>,
     offset: Offset = 0,
   ): Rights {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new Rights(BigValue(data.getBigUint64(0, true)));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Rights.size);
+    return new Rights(data.getBigUint64(0, true) as BigValue<Rights>);
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Rights>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Rights.size);
     data.setBigUint64(0, this.flags, true);
   }
 
   // The right to invoke fd_datasync. If path_open is set, includes the right to
   // invoke path_open with fdflags::dsync.
-  static readonly fd_datasync: BigValue<Rights> = BigValue(1n << 0n);
+  static readonly fd_datasync = (1n << 0n) as BigValue<Rights>;
 
   get fd_datasync(): boolean {
     return (this.flags & Rights.fd_datasync) > 0n;
@@ -455,21 +529,21 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke fd_read and sock_recv. If rights::fd_seek is set,
   // includes the right to invoke fd_pread.
-  static readonly fd_read: BigValue<Rights> = BigValue(1n << 1n);
+  static readonly fd_read = (1n << 1n) as BigValue<Rights>;
 
   get fd_read(): boolean {
     return (this.flags & Rights.fd_read) > 0n;
   }
 
   // The right to invoke fd_seek. This flag implies rights::fd_tell.
-  static readonly fd_seek: BigValue<Rights> = BigValue(1n << 2n);
+  static readonly fd_seek = (1n << 2n) as BigValue<Rights>;
 
   get fd_seek(): boolean {
     return (this.flags & Rights.fd_seek) > 0n;
   }
 
   // The right to invoke fd_fdstat_set_flags.
-  static readonly fd_fdstat_set_flags: BigValue<Rights> = BigValue(1n << 3n);
+  static readonly fd_fdstat_set_flags = (1n << 3n) as BigValue<Rights>;
 
   get fd_fdstat_set_flags(): boolean {
     return (this.flags & Rights.fd_fdstat_set_flags) > 0n;
@@ -477,7 +551,7 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke fd_sync. If path_open is set, includes the right to
   // invoke path_open with fdflags::rsync and fdflags::dsync.
-  static readonly fd_sync: BigValue<Rights> = BigValue(1n << 4n);
+  static readonly fd_sync = (1n << 4n) as BigValue<Rights>;
 
   get fd_sync(): boolean {
     return (this.flags & Rights.fd_sync) > 0n;
@@ -485,7 +559,7 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke fd_seek in such a way that the file offset remains
   // unaltered (i.e., whence::cur with offset zero), or to invoke fd_tell.
-  static readonly fd_tell: BigValue<Rights> = BigValue(1n << 5n);
+  static readonly fd_tell = (1n << 5n) as BigValue<Rights>;
 
   get fd_tell(): boolean {
     return (this.flags & Rights.fd_tell) > 0n;
@@ -493,35 +567,35 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke fd_write and sock_send. If rights::fd_seek is set,
   // includes the right to invoke fd_pwrite.
-  static readonly fd_write: BigValue<Rights> = BigValue(1n << 6n);
+  static readonly fd_write = (1n << 6n) as BigValue<Rights>;
 
   get fd_write(): boolean {
     return (this.flags & Rights.fd_write) > 0n;
   }
 
   // The right to invoke fd_advise.
-  static readonly fd_advise: BigValue<Rights> = BigValue(1n << 7n);
+  static readonly fd_advise = (1n << 7n) as BigValue<Rights>;
 
   get fd_advise(): boolean {
     return (this.flags & Rights.fd_advise) > 0n;
   }
 
   // The right to invoke fd_allocate.
-  static readonly fd_allocate: BigValue<Rights> = BigValue(1n << 8n);
+  static readonly fd_allocate = (1n << 8n) as BigValue<Rights>;
 
   get fd_allocate(): boolean {
     return (this.flags & Rights.fd_allocate) > 0n;
   }
 
   // The right to invoke path_create_directory.
-  static readonly path_create_directory: BigValue<Rights> = BigValue(1n << 9n);
+  static readonly path_create_directory = (1n << 9n) as BigValue<Rights>;
 
   get path_create_directory(): boolean {
     return (this.flags & Rights.path_create_directory) > 0n;
   }
 
   // If path_open is set, the right to invoke path_open with oflags::creat.
-  static readonly path_create_file: BigValue<Rights> = BigValue(1n << 10n);
+  static readonly path_create_file = (1n << 10n) as BigValue<Rights>;
 
   get path_create_file(): boolean {
     return (this.flags & Rights.path_create_file) > 0n;
@@ -529,7 +603,7 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke path_link with the file descriptor as the source
   // directory.
-  static readonly path_link_source: BigValue<Rights> = BigValue(1n << 11n);
+  static readonly path_link_source = (1n << 11n) as BigValue<Rights>;
 
   get path_link_source(): boolean {
     return (this.flags & Rights.path_link_source) > 0n;
@@ -537,27 +611,27 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke path_link with the file descriptor as the target
   // directory.
-  static readonly path_link_target: BigValue<Rights> = BigValue(1n << 12n);
+  static readonly path_link_target = (1n << 12n) as BigValue<Rights>;
 
   get path_link_target(): boolean {
     return (this.flags & Rights.path_link_target) > 0n;
   }
 
   // The right to invoke path_open.
-  static readonly path_open: BigValue<Rights> = BigValue(1n << 13n);
+  static readonly path_open = (1n << 13n) as BigValue<Rights>;
 
   get path_open(): boolean {
     return (this.flags & Rights.path_open) > 0n;
   }
 
   // The right to invoke fd_readdir.
-  static readonly fd_readdir: BigValue<Rights> = BigValue(1n << 14n);
+  static readonly fd_readdir = (1n << 14n) as BigValue<Rights>;
   get fd_readdir(): boolean {
     return (this.flags & Rights.fd_readdir) > 0n;
   }
 
   // The right to invoke path_readlink.
-  static readonly path_readlink: BigValue<Rights> = BigValue(1n << 15n);
+  static readonly path_readlink = (1n << 15n) as BigValue<Rights>;
 
   get path_readlink(): boolean {
     return (this.flags & Rights.path_readlink) > 0n;
@@ -565,7 +639,7 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke path_rename with the file descriptor as the source
   // directory.
-  static readonly path_rename_source: BigValue<Rights> = BigValue(1n << 16n);
+  static readonly path_rename_source = (1n << 16n) as BigValue<Rights>;
 
   get path_rename_source(): boolean {
     return (this.flags & Rights.path_rename_source) > 0n;
@@ -573,14 +647,14 @@ export class Rights implements Data<"rights"> {
 
   // The right to invoke path_rename with the file descriptor as the target
   // directory.
-  static readonly path_rename_target: BigValue<Rights> = BigValue(1n << 17n);
+  static readonly path_rename_target = (1n << 17n) as BigValue<Rights>;
 
   get path_rename_target(): boolean {
     return (this.flags & Rights.path_rename_target) > 0n;
   }
 
   // The right to invoke path_filestat_get.
-  static readonly path_filestat_get: BigValue<Rights> = BigValue(1n << 18n);
+  static readonly path_filestat_get = (1n << 18n) as BigValue<Rights>;
 
   get path_filestat_get(): boolean {
     return (this.flags & Rights.path_filestat_get) > 0n;
@@ -594,59 +668,55 @@ export class Rights implements Data<"rights"> {
   // since no code written for POSIX systems would use it. Moreover,
   // implementing it would require multiple syscalls, leading to inferior
   // performance.
-  static readonly path_filestat_set_size: BigValue<Rights> = BigValue(
-    1n << 19n,
-  );
+  static readonly path_filestat_set_size = (1n << 19n) as BigValue<Rights>;
 
   get path_filestat_set_size(): boolean {
     return (this.flags & Rights.path_filestat_set_size) > 0n;
   }
 
   // The right to invoke path_filestat_set_times.
-  static readonly path_filestat_set_times: BigValue<Rights> = BigValue(
-    1n << 20n,
-  );
+  static readonly path_filestat_set_times = (1n << 20n) as BigValue<Rights>;
   get path_filestat_set_times(): boolean {
     return (this.flags & Rights.path_filestat_set_times) > 0n;
   }
 
   // The right to invoke fd_filestat_get.
-  static readonly fd_filestat_get: BigValue<Rights> = BigValue(1n << 21n);
+  static readonly fd_filestat_get = (1n << 21n) as BigValue<Rights>;
 
   get fd_filestat_get(): boolean {
     return (this.flags & Rights.fd_filestat_get) > 0n;
   }
 
   // The right to invoke fd_filestat_set_size.
-  static readonly fd_filestat_set_size: BigValue<Rights> = BigValue(1n << 22n);
+  static readonly fd_filestat_set_size = (1n << 22n) as BigValue<Rights>;
 
   get fd_filestat_set_size(): boolean {
     return (this.flags & Rights.fd_filestat_set_size) > 0n;
   }
 
   // The right to invoke fd_filestat_set_times.
-  static readonly fd_filestat_set_times: BigValue<Rights> = BigValue(1n << 23n);
+  static readonly fd_filestat_set_times = (1n << 23n) as BigValue<Rights>;
 
   get fd_filestat_set_times(): boolean {
     return (this.flags & Rights.fd_filestat_set_times) > 0n;
   }
 
   // The right to invoke path_symlink.
-  static readonly path_symlink: BigValue<Rights> = BigValue(1n << 24n);
+  static readonly path_symlink = (1n << 24n) as BigValue<Rights>;
 
   get path_symlink(): boolean {
     return (this.flags & Rights.path_symlink) > 0n;
   }
 
   // The right to invoke path_remove_directory.
-  static readonly path_remove_directory: BigValue<Rights> = BigValue(1n << 25n);
+  static readonly path_remove_directory = (1n << 25n) as BigValue<Rights>;
 
   get path_remove_directory(): boolean {
     return (this.flags & Rights.path_remove_directory) > 0n;
   }
 
   // The right to invoke path_unlink_file.
-  static readonly path_unlink_file: BigValue<Rights> = BigValue(1n << 26n);
+  static readonly path_unlink_file = (1n << 26n) as BigValue<Rights>;
 
   get path_unlink_file(): boolean {
     return (this.flags & Rights.path_unlink_file) > 0n;
@@ -655,21 +725,21 @@ export class Rights implements Data<"rights"> {
   // If rights::fd_read is set, includes the right to invoke poll_oneoff to
   // subscribe to eventtype::fd_read. If rights::fd_write is set, includes the
   // right to invoke poll_oneoff to subscribe to eventtype::fd_write.
-  static readonly poll_fd_readwrite: BigValue<Rights> = BigValue(1n << 27n);
+  static readonly poll_fd_readwrite = (1n << 27n) as BigValue<Rights>;
 
   get poll_fd_readwrite(): boolean {
     return (this.flags & Rights.poll_fd_readwrite) > 0n;
   }
 
   // The right to invoke sock_shutdown.
-  static readonly sock_shutdown: BigValue<Rights> = BigValue(1n << 28n);
+  static readonly sock_shutdown = (1n << 28n) as BigValue<Rights>;
 
   get sock_shutdown(): boolean {
     return (this.flags & Rights.sock_shutdown) > 0n;
   }
 
   // The right to invoke sock_accept.
-  static readonly sock_accept: BigValue<Rights> = BigValue(1n << 29n);
+  static readonly sock_accept = (1n << 29n) as BigValue<Rights>;
 
   get sock_accept(): boolean {
     return (this.flags & Rights.sock_accept) > 0n;
@@ -687,9 +757,25 @@ export class Fd implements Data<"fd"> {
     readonly value: Value<Fd>,
   ) {}
 
-  static readonly stdin: Value<Fd> = Value(0);
-  static readonly stdout: Value<Fd> = Value(1);
-  static readonly stderr: Value<Fd> = Value(2);
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Fd>,
+    offset: Offset = 0,
+  ): Fd {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fd.size);
+    return new Fd(
+      data.getUint32(0, true) as Value<Fd>,
+    );
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Fd>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fd.size);
+    data.setUint32(0, this.value, true);
+  }
+
+  static readonly stdin = 0 as Value<Fd>;
+  static readonly stdout = 1 as Value<Fd>;
+  static readonly stderr = 2 as Value<Fd>;
 }
 
 type InitIovec = {
@@ -743,11 +829,32 @@ export class Ciovec implements Data<"ciovec"> {
     ptr: Pointer<Ciovec>,
     offset: Offset = 0,
   ): Ciovec {
-    const data = new DataView(mem.buffer);
     return new Ciovec({
-      buf: Pointer(data.getUint32(addOffset(ptr, offset), true)),
-      len: Size.cast(mem, Pointer(ptr), offset + 4),
+      buf: Pointer.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Pointer<U8>>,
+        offset,
+      ),
+      len: Size.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Size>,
+        offset + 4,
+      ),
     });
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Ciovec>, offset: Offset = 0) {
+    Pointer.store(
+      this.buf,
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Pointer<U8>>,
+      offset,
+    );
+    this.len.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Size>,
+      offset + 4,
+    );
   }
 }
 
@@ -771,7 +878,7 @@ export class Filetype implements Data<"filetype"> {
   ): Filetype {
     const data = new DataView(mem.buffer, addOffset(ptr, offset));
     return new Filetype(
-      Value(data.getUint8(0)),
+      data.getUint8(0) as Value<Filetype>,
     );
   }
 
@@ -781,28 +888,28 @@ export class Filetype implements Data<"filetype"> {
   }
 
   // The type of the file descriptor or file is unknown or is different from any of the other types specified.
-  static readonly unknown: Value<Filetype> = Value(0);
+  static readonly unknown = 0 as Value<Filetype>;
 
   // The file descriptor or file refers to a block device inode.
-  static readonly block_device: Value<Filetype> = Value(1);
+  static readonly block_device = 1 as Value<Filetype>;
 
   // The file descriptor or file refers to a character device inode.
-  static readonly character_device: Value<Filetype> = Value(2);
+  static readonly character_device = 2 as Value<Filetype>;
 
   // The file descriptor or file refers to a directory inode.
-  static readonly directory: Value<Filetype> = Value(3);
+  static readonly directory = 3 as Value<Filetype>;
 
   // The file descriptor or file refers to a regular file inode.
-  static readonly regular_file: Value<Filetype> = Value(4);
+  static readonly regular_file = 4 as Value<Filetype>;
 
   // The file descriptor or file refers to a datagram socket.
-  static readonly socket_dgram: Value<Filetype> = Value(5);
+  static readonly socket_dgram = 5 as Value<Filetype>;
 
   // The file descriptor or file refers to a byte-stream socket.
-  static readonly socket_stream: Value<Filetype> = Value(6);
+  static readonly socket_stream = 6 as Value<Filetype>;
 
   // The file refers to a symbolic link inode.
-  static readonly symbolic_link: Value<Filetype> = Value(7);
+  static readonly symbolic_link = 7 as Value<Filetype>;
 }
 
 // File descriptor flags.
@@ -821,19 +928,19 @@ export class Fdflags implements Data<"fdflags"> {
     ptr: Pointer<Fdflags>,
     offset: Offset = 0,
   ): Fdflags {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fdflags.size);
     return new Fdflags(
-      Value(data.getUint16(0, true)),
+      data.getUint16(0, true) as Value<Fdflags>,
     );
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Fdflags>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fdflags.size);
     data.setUint16(0, this.flags, true);
   }
 
   // Append mode: Data written to the file is always appended to the file's end.
-  static readonly append: Value<Fdflags> = Value(1 << 0);
+  static readonly append = 1 << 0 as Value<Fdflags>;
 
   get append(): boolean {
     return (this.flags & Fdflags.append) > 0;
@@ -841,21 +948,21 @@ export class Fdflags implements Data<"fdflags"> {
 
   // Write according to synchronized I/O data integrity completion. Only the
   // data stored in the file is synchronized.
-  static readonly dsync: Value<Fdflags> = Value(1 << 1);
+  static readonly dsync = 1 << 1 as Value<Fdflags>;
 
   get dsync(): boolean {
     return (this.flags & Fdflags.dsync) > 0;
   }
 
   // Non-blocking mode
-  static readonly nonblock: Value<Fdflags> = Value(1 << 2);
+  static readonly nonblock = 1 << 2 as Value<Fdflags>;
 
   get nonblock(): boolean {
     return (this.flags & Fdflags.nonblock) > 0;
   }
 
   // Synchronized read I/O operations.
-  static readonly rsync: Value<Fdflags> = Value(1 << 3);
+  static readonly rsync = 1 << 3 as Value<Fdflags>;
 
   get rsync(): boolean {
     return (this.flags & Fdflags.rsync) > 0;
@@ -864,7 +971,7 @@ export class Fdflags implements Data<"fdflags"> {
   // Write according to synchronized I/O file integrity completion. In addition
   // to synchronizing the data stored in the file, the implementation may also
   // synchronously update the file's metadata.
-  static readonly sync: Value<Fdflags> = Value(1 << 4);
+  static readonly sync = 1 << 4 as Value<Fdflags>;
 
   get sync(): boolean {
     return (this.flags & Fdflags.sync) > 0;
@@ -913,18 +1020,50 @@ export class Fdstat implements Data<"fdstat"> {
     offset: Offset = 0,
   ): Fdstat {
     return new Fdstat({
-      fs_filetype: Filetype.cast(mem, Pointer(ptr), offset),
-      fs_flags: Fdflags.cast(mem, Pointer(ptr), offset + 2),
-      fs_rights_base: Rights.cast(mem, Pointer(ptr), offset + 8),
-      fs_rights_inheriting: Rights.cast(mem, Pointer(ptr), offset + 16),
+      fs_filetype: Filetype.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Filetype>,
+        offset,
+      ),
+      fs_flags: Fdflags.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Fdflags>,
+        offset + 2,
+      ),
+      fs_rights_base: Rights.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Rights>,
+        offset + 8,
+      ),
+      fs_rights_inheriting: Rights.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Rights>,
+        offset + 16,
+      ),
     });
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Fdstat>, offset: Offset = 0) {
-    this.fs_filetype.store(mem, Pointer(ptr), offset);
-    this.fs_flags.store(mem, Pointer(ptr), offset + 2);
-    this.fs_rights_base.store(mem, Pointer(ptr), offset + 8);
-    this.fs_rights_inheriting.store(mem, Pointer(ptr), offset + 16);
+    this.fs_filetype.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Filetype>,
+      offset,
+    );
+    this.fs_flags.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Fdflags>,
+      offset + 2,
+    );
+    this.fs_rights_base.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Rights>,
+      offset + 8,
+    );
+    this.fs_rights_inheriting.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Rights>,
+      offset + 16,
+    );
   }
 }
 
@@ -958,12 +1097,20 @@ export class Userdata implements Data<"userdata"> {
     ptr: Pointer<Userdata>,
     offset: Offset = 0,
   ): Userdata {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new Userdata(BigValue(data.getBigUint64(0, true)));
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Userdata.size,
+    );
+    return new Userdata(data.getBigUint64(0, true) as BigValue<Userdata>);
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Userdata>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Userdata.size,
+    );
     data.setBigUint64(0, this.value, true);
   }
 }
@@ -984,23 +1131,50 @@ export class Eventtype implements Data<"eventtype"> {
     ptr: Pointer<Eventtype>,
     offset: Offset = 0,
   ): Eventtype {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Eventtype.size,
+    );
     return new Eventtype(data.getUint8(0) as Value<Eventtype>);
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Eventtype>, offset: Offset = 0) {
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Eventtype.size,
+    );
+    data.setUint8(0, this.value);
   }
 
   // The time value of clock subscription_clock::id has reached timestamp
   // subscription_clock::timeout.
   static readonly clock = 0 as Value<Eventtype>;
 
+  get clock(): boolean {
+    return this.value === Eventtype.clock;
+  }
+
   // File descriptor subscription_fd_readwrite::file_descriptor has data
   // available for reading. This event always triggers for regular files.
   static readonly fd_read = 1 as Value<Eventtype>;
 
+  get fd_read(): boolean {
+    return this.value === Eventtype.fd_read;
+  }
+
   // File descriptor subscription_fd_readwrite::file_descriptor has capacity
   // available for writing. This event always triggers for regular files.
   static readonly fd_write = 2 as Value<Eventtype>;
+
+  get fd_write(): boolean {
+    return this.value === Eventtype.fd_write;
+  }
 }
 
+// The state of the file descriptor subscribed to with eventtype::fd_read or
+// eventtype::fd_write.
 export class Eventrwflags implements Data<"eventrwflags"> {
   readonly __data = "eventrwflags";
 
@@ -1011,23 +1185,50 @@ export class Eventrwflags implements Data<"eventrwflags"> {
     private readonly flags: Value<Eventrwflags>,
   ) {}
 
+  static zero(): Eventrwflags {
+    return new Eventrwflags(0 as Value<Eventrwflags>);
+  }
+
   static cast(
     mem: WebAssembly.Memory,
     ptr: Pointer<Eventrwflags>,
     offset: Offset = 0,
   ): Eventrwflags {
-    const data = new DataView(mem.buffer);
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Eventrwflags.size,
+    );
     return new Eventrwflags(
-      Value(data.getUint16(addOffset(ptr, offset), true)),
+      data.getUint16(0, true) as Value<Eventrwflags>,
     );
   }
 
-  static readonly fdReadwriteHangup = 1;
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Eventrwflags>,
+    offset: Offset = 0,
+  ) {
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Eventrwflags.size,
+    );
+    data.setUint16(0, this.flags, true);
+  }
 
-  get fdReadwriteHangup(): boolean {
-    return (this.flags & Eventrwflags.fdReadwriteHangup) > 0;
+  // peer of this socket has closed or disconnected.
+  static readonly fd_readwrite_hangup = 1 as Value<Eventrwflags>;
+
+  get fd_readwrite_hangup(): boolean {
+    return (this.flags & Eventrwflags.fd_readwrite_hangup) > 0;
   }
 }
+
+type InitEventFdReadwrite = {
+  readonly nbytes: Filesize;
+  readonly flags: Eventrwflags;
+};
 
 // event_fd_readwrite: Record
 //
@@ -1038,71 +1239,335 @@ export class EventFdReadwrite implements Data<"event_fd_readwrite"> {
   static readonly size = 16;
   static readonly alignment = 8;
 
-  constructor(
-    readonly nbytes: Filesize,
-    readonly flags: Eventrwflags,
-  ) {}
+  // The number of bytes available for reading or writing.
+  readonly nbytes: Filesize;
+
+  // The state of the file descriptor.
+  readonly flags: Eventrwflags;
+
+  constructor({ nbytes, flags }: InitEventFdReadwrite) {
+    this.nbytes = nbytes;
+    this.flags = flags;
+  }
+
+  static zero(): EventFdReadwrite {
+    return new EventFdReadwrite({
+      nbytes: Filesize.zero(),
+      flags: Eventrwflags.zero(),
+    });
+  }
 
   static cast(
     mem: WebAssembly.Memory,
     ptr: Pointer<EventFdReadwrite>,
     offset: Offset = 0,
   ): EventFdReadwrite {
-    return new EventFdReadwrite(
-      Filesize.cast(mem, Pointer(ptr), offset),
-      Eventrwflags.cast(mem, Pointer(ptr), offset + 8),
+    return new EventFdReadwrite({
+      nbytes: Filesize.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Filesize>,
+        offset,
+      ),
+      flags: Eventrwflags.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Eventrwflags>,
+        offset + 8,
+      ),
+    });
+  }
+
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<EventFdReadwrite>,
+    offset: Offset = 0,
+  ) {
+    this.nbytes.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Filesize>,
+      offset,
+    );
+    this.flags.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Eventrwflags>,
+      offset + 8,
     );
   }
 }
 
-export class Subclockflags {
-  readonly size = 2;
+// Flags determining how to interpret the timestamp provided in
+// subscription_clock::timeout.
+export class Subclockflags implements Data<"subclockflags"> {
+  readonly __data = "subclockflags";
+
+  static readonly size = 2;
+  static readonly alignment = 2;
   constructor(
-    private readonly flags: number,
+    private readonly flags: Value<Subclockflags>,
   ) {}
 
-  subscriptionClockAbstime(): boolean {
-    return (this.flags & 1) > 0;
+  static zero(): Subclockflags {
+    return new Subclockflags(0 as Value<Subclockflags>);
+  }
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Subclockflags>,
+    offset: Offset = 0,
+  ): Subclockflags {
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Subclockflags.size,
+    );
+    return new Subclockflags(
+      data.getUint16(0, true) as Value<Subclockflags>,
+    );
+  }
+
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Subclockflags>,
+    offset: Offset = 0,
+  ) {
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Subclockflags.size,
+    );
+    data.setUint16(0, this.flags, true);
+  }
+
+  // set, treat the timestamp provided in subscription_clock::timeout as an
+  // absolute timestamp of clock subscription_clock::id. If clear, treat the
+  // timestamp provided in subscription_clock::timeout relative to the current
+  // time value of clock subscription_clock::id.
+  static readonly subscription_clock_abstime = 1 << 0 as Value<Subclockflags>;
+
+  get subscription_clock_abstime(): boolean {
+    return (this.flags & Subclockflags.subscription_clock_abstime) > 0;
   }
 }
 
-// subscription_clock: Record
-//
+type InitSubscriptionClock = {
+  readonly id: Clockid;
+  readonly timeout: Timestamp;
+  readonly precision: Timestamp;
+  readonly flags: Subclockflags;
+};
+
 // The contents of a subscription when type is eventtype::clock.
-export class SubscriptionClock {
-  readonly size = 32;
-  constructor(
-    readonly id: Clockid,
-    readonly timeout: Timestamp,
-    readonly precision: Timestamp,
-    readonly flags: Subclockflags,
-  ) {}
+export class SubscriptionClock implements Data<"subscription_clock"> {
+  readonly __data = "subscription_clock";
+
+  static readonly size = 32;
+  static readonly alignment = 8;
+
+  // The clock against which to compare the timestamp.
+  readonly id: Clockid;
+
+  // The absolute or relative timestamp.
+  readonly timeout: Timestamp;
+
+  // The amount of time that the implementation may wait additionally to
+  // coalesce with other events.
+  readonly precision: Timestamp;
+
+  // Flags specifying whether the timeout is absolute or relative.
+  readonly flags: Subclockflags;
+
+  constructor({
+    id,
+    timeout,
+    precision,
+    flags,
+  }: InitSubscriptionClock) {
+    this.id = id;
+    this.timeout = timeout;
+    this.precision = precision;
+    this.flags = flags;
+  }
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionClock>,
+    offset: Offset = 0,
+  ): SubscriptionClock {
+    return new SubscriptionClock({
+      id: Clockid.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Clockid>,
+        offset,
+      ),
+      timeout: Timestamp.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Timestamp>,
+        offset + 8,
+      ),
+      precision: Timestamp.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Timestamp>,
+        offset + 16,
+      ),
+      flags: Subclockflags.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Subclockflags>,
+        offset + 24,
+      ),
+    });
+  }
+
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionClock>,
+    offset: Offset = 0,
+  ) {
+    this.id.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Clockid>,
+      offset,
+    );
+    this.timeout.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Timestamp>,
+      offset + 8,
+    );
+    this.precision.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Timestamp>,
+      offset + 16,
+    );
+    this.flags.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Subclockflags>,
+      offset + 24,
+    );
+  }
 }
 
-// subscription_fd_readwrite: Record
-//
-// The contents of a subscription when type is type is eventtype::fd_read or eventtype::fd_write.
-export class SubscriptionFdReadwrite {
-  readonly size = 4;
-  constructor(
-    readonly fd: Fd,
-  ) {}
+type InitSubscriptionFdReadwrite = {
+  readonly fd: Fd;
+};
+
+// The contents of a subscription when type is type is eventtype::fd_read or
+// eventtype::fd_write.
+export class SubscriptionFdReadwrite
+  implements Data<"subscription_fd_readwrite"> {
+  readonly __data = "subscription_fd_readwrite";
+
+  static readonly size = 4;
+  static readonly alignment = 4;
+
+  // The file descriptor on which to wait for it to become ready for reading
+  // or writing.
+  readonly fd: Fd;
+
+  constructor({
+    fd,
+  }: InitSubscriptionFdReadwrite) {
+    this.fd = fd;
+  }
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionFdReadwrite>,
+    offset: Offset = 0,
+  ): SubscriptionFdReadwrite {
+    return new SubscriptionFdReadwrite({
+      fd: Fd.cast(mem, ptr as Pointer<Data<string>> as Pointer<Fd>, offset),
+    });
+  }
+
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionFdReadwrite>,
+    offset: Offset = 0,
+  ) {
+    this.fd.store(mem, ptr as Pointer<Data<string>> as Pointer<Fd>, offset);
+  }
 }
 
-// subscription: Record
-//
-// Subscription to an event.
+type InitSubscriptionU = {
+  readonly type: Eventtype;
+  readonly content: SubscriptionClock | SubscriptionFdReadwrite;
+};
+
+// The contents of a subscription.
 export class SubscriptionU implements Data<"subscription_u"> {
   readonly __data = "subscription_u";
 
   static readonly size = 40;
   static readonly alignment = 8;
 
-  constructor(
-    readonly type: Eventtype,
-    readonly content: SubscriptionClock | SubscriptionFdReadwrite,
-  ) {}
+  // Variant cases
+  // - clock: subscription_clock
+  // - fd_read: subscription_fd_readwrite
+  // - fd_write: subscription_fd_readwrite
+  readonly type: Eventtype;
+  readonly content: SubscriptionClock | SubscriptionFdReadwrite;
+
+  constructor({
+    type,
+    content,
+  }: InitSubscriptionU) {
+    this.type = type;
+    this.content = content;
+  }
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionU>,
+    offset: Offset = 0,
+  ): SubscriptionU {
+    const type = Eventtype.cast(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Eventtype>,
+      offset,
+    );
+    const content = type.clock
+      ? SubscriptionClock.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<SubscriptionClock>,
+        offset + 8,
+      )
+      : SubscriptionFdReadwrite.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<SubscriptionFdReadwrite>,
+        offset + 8,
+      );
+    return new SubscriptionU({ type, content });
+  }
+
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionU>,
+    offset: Offset = 0,
+  ) {
+    this.type.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Eventtype>,
+      offset,
+    );
+
+    if (this.type.clock) {
+      (this.content as SubscriptionClock).store(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<SubscriptionClock>,
+        offset + 8,
+      );
+    } else {
+      (this.content as SubscriptionFdReadwrite).store(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<SubscriptionFdReadwrite>,
+        offset + 8,
+      );
+    }
+  }
 }
+
+type InitSubscription = {
+  readonly userdata: Userdata;
+  readonly u: SubscriptionU;
+};
 
 // Subscription to an event.
 export class Subscription implements Data<"subscription"> {
@@ -1111,11 +1576,64 @@ export class Subscription implements Data<"subscription"> {
   static readonly size = 48;
   static readonly alignment = 8;
 
-  constructor(
-    readonly userdata: Userdata,
-    readonly u: SubscriptionU,
-  ) {}
+  // User-provided value that is attached to the subscription in the
+  // implementation and returned through event::userdata.
+  readonly userdata: Userdata;
+
+  // The type of the event to which to subscribe, and its contents
+  readonly u: SubscriptionU;
+
+  constructor({
+    userdata,
+    u,
+  }: InitSubscription) {
+    this.userdata = userdata;
+    this.u = u;
+  }
+
+  static cast(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<Subscription>,
+    offset: Offset = 0,
+  ): Subscription {
+    return new Subscription({
+      userdata: Userdata.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Userdata>,
+        offset,
+      ),
+      u: SubscriptionU.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<SubscriptionU>,
+        offset + 8,
+      ),
+    });
+  }
+
+  store(
+    mem: WebAssembly.Memory,
+    ptr: Pointer<SubscriptionClock>,
+    offset: Offset = 0,
+  ) {
+    this.userdata.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Userdata>,
+      offset,
+    );
+    this.u.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<SubscriptionU>,
+      offset + 8,
+    );
+  }
 }
+
+type InitEvent = {
+  readonly userdata: Userdata;
+  readonly error: Errno;
+  readonly type: Eventtype;
+  readonly fd_readwrite: EventFdReadwrite;
+};
 
 // event: Record
 //
@@ -1126,23 +1644,81 @@ export class Event implements Data<"event"> {
   static readonly size = 32;
   static readonly alignment = 8;
 
-  constructor(
-    readonly userdata: Userdata,
-    readonly error: Errno,
-    readonly type: Eventtype,
-    readonly fdReadwrite: EventFdReadwrite,
-  ) {}
+  // User-provided value that got attached to subscription::userdata.
+  readonly userdata: Userdata;
+
+  // If non-zero, an error that occurred while processing the subscription
+  // request.
+  readonly error: Errno;
+
+  // The type of event that occured
+  readonly type: Eventtype;
+
+  // The contents of the event, if it is an eventtype::fd_read or
+  // eventtype::fd_write. eventtype::clock events ignore this field.
+  readonly fd_readwrite: EventFdReadwrite;
+
+  constructor({
+    userdata,
+    error,
+    type,
+    fd_readwrite,
+  }: InitEvent) {
+    this.userdata = userdata;
+    this.error = error;
+    this.type = type;
+    this.fd_readwrite = fd_readwrite;
+  }
 
   static cast(
     mem: WebAssembly.Memory,
     ptr: Pointer<Event>,
     offset: Offset = 0,
   ): Event {
-    return new Event(
-      Userdata.cast(mem, Pointer(ptr), offset),
-      Errno.cast(mem, Pointer(ptr), offset + 8),
-      Eventtype.cast(mem, Pointer(ptr), offset + 10),
-      EventFdReadwrite.cast(mem, Pointer(ptr), offset + 16),
+    return new Event({
+      userdata: Userdata.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Userdata>,
+        offset,
+      ),
+      error: Errno.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Errno>,
+        offset + 8,
+      ),
+      type: Eventtype.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Eventtype>,
+        offset + 10,
+      ),
+      fd_readwrite: EventFdReadwrite.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<EventFdReadwrite>,
+        offset + 16,
+      ),
+    });
+  }
+
+  store(mem: WebAssembly.Memory, ptr: Pointer<Event>, offset: Offset = 0) {
+    this.userdata.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Userdata>,
+      offset,
+    );
+    this.error.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Errno>,
+      offset + 8,
+    );
+    this.type.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Eventtype>,
+      offset + 10,
+    );
+    this.fd_readwrite.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<EventFdReadwrite>,
+      offset + 16,
     );
   }
 }
@@ -1167,8 +1743,12 @@ export class Preopentype implements Data<"preopentype"> {
     ptr: Pointer<Preopentype>,
     offset: Offset = 0,
   ): Preopentype {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    return new Preopentype(Value(data.getUint8(0)));
+    const data = new DataView(
+      mem.buffer,
+      addOffset(ptr, offset),
+      Preopentype.size,
+    );
+    return new Preopentype(data.getUint8(0) as Value<Preopentype>);
   }
 
   store(
@@ -1181,7 +1761,7 @@ export class Preopentype implements Data<"preopentype"> {
   }
 
   // A pre-opened directory.
-  static readonly dir: Value<Preopentype> = Value(0);
+  static readonly dir = 0 as Value<Preopentype>;
 
   dir(): boolean {
     return this.value === Preopentype.dir;
@@ -1214,12 +1794,20 @@ export class PrestatDir implements Data<"prestat_dir"> {
     offset: Offset = 0,
   ): PrestatDir {
     return new PrestatDir({
-      pr_name_len: Size.cast(mem, Pointer(ptr), offset),
+      pr_name_len: Size.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Size>,
+        offset,
+      ),
     });
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<PrestatDir>, offset: Offset = 0) {
-    this.pr_name_len.store(mem, Pointer(ptr), offset);
+    this.pr_name_len.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Size>,
+      offset,
+    );
   }
 }
 
@@ -1252,13 +1840,29 @@ export class Prestat implements Data<"prestat"> {
     offset: Offset = 0,
   ): Prestat {
     return new Prestat({
-      type: Preopentype.cast(mem, Pointer(ptr), offset),
-      content: PrestatDir.cast(mem, Pointer(ptr), offset + 4),
+      type: Preopentype.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Preopentype>,
+        offset,
+      ),
+      content: PrestatDir.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<PrestatDir>,
+        offset + 4,
+      ),
     });
   }
 
   store(mem: WebAssembly.Memory, ptr: Pointer<Prestat>, offset: Offset = 0) {
-    this.type.store(mem, Pointer(ptr), offset);
-    this.content.store(mem, Pointer(ptr), offset + 4);
+    this.type.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Preopentype>,
+      offset,
+    );
+    this.content.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<PrestatDir>,
+      offset + 4,
+    );
   }
 }

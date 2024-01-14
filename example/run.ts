@@ -6,7 +6,9 @@ const wasi_snapshot_preview1 = Preview1.Module as {
 };
 for (const [name, fn] of Object.entries(wasi_snapshot_preview1)) {
   wasi_snapshot_preview1[name] = (...args: unknown[]) => {
-    log.push(`=== ${name}(${args.join()})`);
+    const logv = `=== ${name}(${args.join()})`;
+    // console.debug(logv);
+    log.push(logv);
     return fn(...args);
   };
 }
@@ -22,10 +24,20 @@ const { _start, memory } = await WebAssembly.instantiateStreaming(
 );
 
 const strs: string[] = [];
-const stdout = (str: string) => strs.push(str);
-const stderr = (str: string) => strs.push(str);
+const stdout = (str: string) => {
+  // console.debug(str);
+  strs.push(str);
+};
+const stderr = (str: string) => {
+  // console.debug(str);
+  strs.push(str);
+};
 
-Preview1.init({ memory, stdout, stderr });
+const args = Deno.args.map((arg) => new Preview1.Arg(arg));
+const envs = [
+  new Preview1.Env("DEBUG", "1"),
+];
+Preview1.init({ memory, stdout, stderr, args, envs });
 
 try {
   _start();

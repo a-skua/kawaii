@@ -7,6 +7,9 @@ import {
   Clockid,
   Data,
   Errno,
+  Event,
+  EventFdReadwrite,
+  Eventtype,
   Exitcode,
   Fd,
   Fdflags,
@@ -14,6 +17,14 @@ import {
   Filetype,
   Pointer,
   Rights,
+  Size,
+  Subclockflags,
+  Subscription,
+  SubscriptionClock,
+  SubscriptionFdReadwrite,
+  SubscriptionU,
+  Timestamp,
+  Userdata,
   Value,
 } from "./type.ts";
 import init, {
@@ -27,12 +38,21 @@ import init, {
   Exit,
   fd_fdstat_get,
   fd_fdstat_set_flags,
+  fd_prestat_get,
   fd_write,
   poll_oneoff,
   proc_exit,
   random_get,
   sched_yield,
 } from "./mod.ts";
+
+const toPointer = <T extends Data<string>>(p: number): Pointer<T> =>
+  p as Pointer<T>;
+
+const BigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
+  v as BigValue<T>;
+
+const Value = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
 
 interface DataType {
   alignment: number;
@@ -42,7 +62,7 @@ const randomPointer = <T extends Data<string>>(
   { alignment }: DataType,
 ): Pointer<T> => {
   const random = Math.floor(Math.random() * (1024 / alignment));
-  return Pointer(random * alignment);
+  return toPointer(random * alignment);
 };
 
 Deno.test(Arg.name, () => {
@@ -78,7 +98,7 @@ Deno.test(args_get.name, () => {
 
   init({ memory, args });
 
-  assertEquals(args_get(Pointer(0), Pointer(8)), Errno.success);
+  assertEquals(args_get(toPointer(0), toPointer(8)), Errno.success);
   assertEquals(
     new Uint8Array(memory.buffer).slice(0, 16),
     new Uint8Array([
@@ -97,7 +117,7 @@ Deno.test(args_sizes_get.name, () => {
   init({ memory, args });
 
   assertEquals(
-    args_sizes_get(Pointer(0), Pointer(4)),
+    args_sizes_get(toPointer(0), toPointer(4)),
     Errno.success,
   );
   assertEquals(
@@ -120,7 +140,7 @@ Deno.test("clock_time_get", async (t) => {
     const pointer = 0;
 
     assertEquals(
-      clock_time_get(Clockid.realtime, BigValue(0n), Pointer(pointer)),
+      clock_time_get(Clockid.realtime, BigValue(0n), toPointer(pointer)),
       Errno.success,
     );
     assertEquals(
@@ -132,7 +152,7 @@ Deno.test("clock_time_get", async (t) => {
   await t.step("monotonic", () => {
     const pointer = 8;
     assertEquals(
-      clock_time_get(Clockid.monotonic, BigValue(0n), Pointer(pointer)),
+      clock_time_get(Clockid.monotonic, BigValue(0n), toPointer(pointer)),
       Errno.success,
     );
     assertEquals(
@@ -148,7 +168,7 @@ Deno.test("clock_time_get", async (t) => {
       clock_time_get(
         Clockid.process_cputime_id,
         BigValue(0n),
-        Pointer(pointer),
+        toPointer(pointer),
       ),
       Errno.notsup,
     );
@@ -161,7 +181,7 @@ Deno.test("clock_time_get", async (t) => {
       clock_time_get(
         Clockid.thread_cputime_id,
         BigValue(0n),
-        Pointer(pointer),
+        toPointer(pointer),
       ),
       Errno.notsup,
     );
@@ -175,7 +195,7 @@ Deno.test(environ_get.name, () => {
 
   init({ memory, envs });
   assertEquals(
-    environ_get(Pointer(0), Pointer(8)),
+    environ_get(toPointer(0), toPointer(8)),
     Errno.success,
   );
   assertEquals(
@@ -196,7 +216,7 @@ Deno.test(environ_sizes_get.name, () => {
   init({ memory, envs });
 
   assertEquals(
-    environ_sizes_get(Pointer(0), Pointer(4)),
+    environ_sizes_get(toPointer(0), toPointer(4)),
     Errno.success,
   );
   assertEquals(
@@ -208,7 +228,7 @@ Deno.test(environ_sizes_get.name, () => {
   );
 });
 
-Deno.test(fd_write.name, async (t) => {
+Deno.test("fd_write", async (t) => {
   const memory = new WebAssembly.Memory({ initial: 1 });
   const array = new Uint8Array(memory.buffer);
   const data = new DataView(memory.buffer);
@@ -232,7 +252,7 @@ Deno.test(fd_write.name, async (t) => {
     encoder.encodeInto("World", array.subarray(105));
 
     assertEquals(
-      fd_write(Fd.stdout, Pointer(4), Value(2), Pointer(0)),
+      fd_write(Fd.stdout, toPointer(4), Value(2), toPointer(0)),
       Errno.success,
     );
     assertEquals(data.getUint32(0, true), 10);
@@ -249,7 +269,7 @@ Deno.test(fd_write.name, async (t) => {
     encoder.encodeInto("World!", array.subarray(107));
 
     assertEquals(
-      fd_write(Fd.stderr, Pointer(4), Value(2), Pointer(0)),
+      fd_write(Fd.stderr, toPointer(4), Value(2), toPointer(0)),
       Errno.success,
     );
     assertEquals(data.getUint32(0, true), 13);
@@ -263,25 +283,89 @@ Deno.test(random_get.name, () => {
   init({ memory });
 
   assertEquals(
-    random_get(Pointer(100), Value(8)),
+    random_get(toPointer(100), Value(8)),
     Errno.success,
   );
   assert(new Uint8Array(memory.buffer, 100, 8).reduce((sum, n) => sum + n) > 0);
 });
 
-Deno.test(poll_oneoff.name, async (t) => {
+Deno.test("poll_oneoff", async (t) => {
   await t.step("nsubscriptions is 0", () => {
     assertEquals(
-      poll_oneoff(Pointer(0), Pointer(0), Value(0), Pointer(0)),
+      poll_oneoff(toPointer(0), toPointer(0), Value(0), toPointer(0)),
       Errno.inval,
     );
   });
 
   await t.step("normal", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const subscriptions = [
+      new Subscription({
+        userdata: new Userdata(BigValue(1n)),
+        u: new SubscriptionU({
+          type: new Eventtype(Eventtype.clock),
+          content: new SubscriptionClock({
+            id: new Clockid(Clockid.realtime),
+            timeout: new Timestamp(BigValue(0n)),
+            precision: new Timestamp(BigValue(0n)),
+            flags: Subclockflags.zero(),
+          }),
+        }),
+      }),
+      new Subscription({
+        userdata: new Userdata(BigValue(2n)),
+        u: new SubscriptionU({
+          type: new Eventtype(Eventtype.fd_read),
+          content: new SubscriptionFdReadwrite({
+            fd: new Fd(Value(0)),
+          }),
+        }),
+      }),
+    ];
+
+    const ins = 100;
+    for (let i = 0; i < subscriptions.length; i += 1) {
+      subscriptions[i].store(memory, toPointer(ins), Subscription.size * i);
+    }
+    const out = 200;
+    const events = [
+      new Event({
+        userdata: new Userdata(BigValue(1n)),
+        error: new Errno(Errno.notsup),
+        type: new Eventtype(Eventtype.clock),
+        fd_readwrite: EventFdReadwrite.zero(),
+      }),
+      new Event({
+        userdata: new Userdata(BigValue(2n)),
+        error: new Errno(Errno.notsup),
+        type: new Eventtype(Eventtype.fd_read),
+        fd_readwrite: EventFdReadwrite.zero(),
+      }),
+    ];
+
+    const result = 300;
+
     assertEquals(
-      poll_oneoff(Pointer(0), Pointer(0), Value(1), Pointer(0)),
-      Errno.notsup,
+      poll_oneoff(
+        toPointer(ins),
+        toPointer(out),
+        Value(subscriptions.length),
+        toPointer(result),
+      ),
+      Errno.success,
     );
+    assertEquals(
+      Size.cast(memory, toPointer(result)),
+      new Size(Value(events.length)),
+    );
+    for (let i = 0; i < events.length; i += 1) {
+      assertEquals(
+        Event.cast(memory, toPointer(out), Event.size * i),
+        events[i],
+      );
+    }
   });
 });
 
@@ -297,8 +381,8 @@ Deno.test("fd_fdstat_get", async (t) => {
       new Fdstat({
         fs_filetype: new Filetype(Filetype.character_device),
         fs_flags: new Fdflags(Fdflags.nonblock),
-        fs_rights_base: Rights.no(),
-        fs_rights_inheriting: Rights.no(),
+        fs_rights_base: Rights.zero(),
+        fs_rights_inheriting: Rights.zero(),
       }),
     );
   });
@@ -388,4 +472,8 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
       Errno.badf,
     );
   });
+});
+
+Deno.test("fd_prestat_get", () => {
+  assertEquals(fd_prestat_get(Value(0), toPointer(0)), Errno.badf);
 });
