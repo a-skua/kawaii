@@ -3,6 +3,7 @@ import {
   Ciovec,
   CiovecArray,
   Clockid,
+  Dircookie,
   Errno,
   Event,
   EventFdReadwrite,
@@ -14,6 +15,7 @@ import {
   Filestat,
   Filetype,
   IovecArray,
+  Lookupflags,
   Pointer,
   Prestat,
   Rights,
@@ -78,20 +80,20 @@ export function proc_exit(rval: Value<Exitcode>) {
 // Read command-line argument data. The size of the array should match that
 // returned by args_sizes_get. Each argument is expected to be \0 terminated.
 export function args_get(
-  argv: Pointer<Pointer<U8>>,
-  argv_buf: Pointer<U8>,
+  argv: Pointer<Pointer<U8<string>>>,
+  argv_buf: Pointer<U8<string>>,
 ): Value<Errno> {
   const data = new DataView(memory.buffer);
   const array = new Uint8Array(memory.buffer);
 
   for (const arg of args) {
     data.setUint32(argv, argv_buf, true);
-    argv = argv + 4 as Pointer<Pointer<U8>>;
+    argv = argv + 4 as Pointer<Pointer<U8<string>>>;
     const { written } = encoder.encodeInto(
       `${arg}\0`,
       array.subarray(argv_buf),
     );
-    argv_buf = argv_buf + written as Pointer<U8>;
+    argv_buf = argv_buf + written as Pointer<U8<string>>;
   }
   return Errno.success;
 }
@@ -147,8 +149,8 @@ export function clock_time_get(
 // returned by `environ_sizes_get`. Key/value pairs are expected to be joined
 // with `=`s, and terminated with `\0`s.
 export function environ_get(
-  environ: Pointer<Pointer<U8>>,
-  env_buf: Pointer<U8>,
+  environ: Pointer<Pointer<U8<string>>>,
+  env_buf: Pointer<U8<string>>,
 ): Value<Errno> {
   const array = new Uint8Array(memory.buffer);
 
@@ -159,7 +161,7 @@ export function environ_get(
       `${envs[i]}\0`,
       array.subarray(env_buf),
     );
-    env_buf = env_buf + written as Pointer<U8>;
+    env_buf = env_buf + written as Pointer<U8<string>>;
   }
   return Errno.success;
 }
@@ -230,7 +232,10 @@ export function fd_write(
 // data are required, it's advisable to use this function to seed a
 // pseudo-random number generator, rather than to provide the random data
 // directly.
-export function random_get(buf: Pointer<U8>, len: Value<Size>): Value<Errno> {
+export function random_get(
+  buf: Pointer<U8<string>>,
+  len: Value<Size>,
+): Value<Errno> {
   crypto.getRandomValues(new Uint8Array(memory.buffer, buf, len));
   return Errno.success;
 }
@@ -413,15 +418,61 @@ export function fd_prestat_get(
   return Errno.badf;
 }
 
-// fd_prestat_dir_name(fd: fd, path: Pointer<u8>, path_len: size) -> Result<(), errno>
+// fd_prestat_dir_name(fd: fd, path: Pointer<u8>, path_len: size) ->
+// Result<(), errno>
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_dir_name(
   _fd: Fd,
-  _path: Pointer<U8>,
+  _path: Pointer<U8<string>>,
   _path_len: Size,
 ): Value<Errno> {
   return Errno.nosys;
+}
+
+// fd_readdir(fd: fd, buf: Pointer<u8>, buf_len: size, cookie: dircookie) ->
+// Result<size, errno>
+//
+// Read directory entries from a directory. When successful, the contents of
+// the output buffer consist of a sequence of directory entries. Each directory
+// entry consists of a dirent object, followed by dirent::d_namlen bytes holding
+// the name of the directory entry. This function fills the output buffer as
+// much as possible, potentially truncating the last directory entry. This
+// allows the caller to grow its read buffer size in case it's too small to fit
+// a single large directory entry, or skip the oversized directory entry.
+export function fd_readdir(
+  _fd: Value<Fd>,
+  // The buffer where directory entries are stored
+  _buf: Pointer<U8<string>>,
+  _buf_len: Value<Size>,
+  // The location within the directory to start reading
+  _cookie: BigValue<Dircookie>,
+): Value<Errno> {
+  return Errno.notsup;
+}
+
+// Return the attributes of a file or directory. Note: This is similar to stat
+// in POSIX.
+export function path_filestat_get(
+  _fd: Value<Fd>,
+  // Flags determining the method of how the path is resolved.
+  _flags: Value<Lookupflags>,
+  // The path of the file or directory to inspect.
+  path_buf: Pointer<U8<string>>,
+  path_len: Value<Size>,
+  // The buffer where the file's attributes are stored.
+  _result: Pointer<Filestat>,
+): Value<Errno> {
+  const path = decoder.decode(
+    new Uint8Array(memory.buffer, path_buf, path_len),
+  );
+  console.debug("DEBUG", "path:", path, path.length);
+  return Errno.notsup;
+}
+
+// TODO
+export function path_open(): Value<Errno> {
+  return Errno.notsup;
 }
 
 export const Module = {
@@ -444,6 +495,9 @@ export const Module = {
   fd_fdstat_set_flags,
   fd_prestat_get,
   fd_prestat_dir_name,
+  fd_readdir,
+  path_filestat_get,
+  path_open,
 };
 
 export type Module = typeof Module;

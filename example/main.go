@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -17,4 +19,14 @@ func main() {
 		fmt.Println("Debug mode is on")
 	}
 	fmt.Printf("Hello, %s\n", strings.Join(os.Args[1:], " "))
+
+	log.Println("walk dir")
+	fileSystem := os.DirFS(".")
+	fs.WalkDir(fileSystem, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println(d)
+		return nil
+	})
 }

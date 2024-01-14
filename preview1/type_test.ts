@@ -4,6 +4,8 @@ import {
   Ciovec,
   Clockid,
   Data,
+  Device,
+  Dircookie,
   Errno,
   Event,
   EventFdReadwrite,
@@ -13,7 +15,11 @@ import {
   Fdflags,
   Fdstat,
   Filesize,
+  Filestat,
   Filetype,
+  Inode,
+  Linkcount,
+  Lookupflags,
   Pointer,
   Preopentype,
   Prestat,
@@ -26,7 +32,6 @@ import {
   SubscriptionFdReadwrite,
   SubscriptionU,
   Timestamp,
-  U8,
   Userdata,
   Value,
 } from "./type.ts";
@@ -34,9 +39,9 @@ import {
 const toPointer = <T extends Data<string>>(p: number): Pointer<T> =>
   p as Pointer<T>;
 
-const Value = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
+const toValue = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
 
-const BigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
+const toBigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
   v as BigValue<T>;
 
 interface DataType {
@@ -69,7 +74,7 @@ Deno.test("ciovec", async (t) => {
       Ciovec.cast(memory, toPointer(pointer), offset),
       new Ciovec({
         buf: toPointer(pointer),
-        len: new Size(Value(16)),
+        len: new Size(toValue(16)),
       }),
     );
   });
@@ -81,7 +86,7 @@ Deno.test("ciovec", async (t) => {
 
     const iovec = new Ciovec({
       buf: toPointer(100),
-      len: new Size(Value(32)),
+      len: new Size(toValue(32)),
     });
     iovec.store(memory, toPointer(pointer), offset);
 
@@ -108,7 +113,7 @@ Deno.test("eventrwflags", async (t) => {
 
     assertEquals(
       Eventrwflags.cast(memory, toPointer(pointer), offset),
-      new Eventrwflags(Value(1)),
+      new Eventrwflags(toValue(1)),
     );
   });
 
@@ -131,12 +136,12 @@ Deno.test("eventrwflags", async (t) => {
   });
 
   await t.step("fd_readwrite_hangup is true", () => {
-    const flags = new Eventrwflags(Value(1));
+    const flags = new Eventrwflags(toValue(1));
     assertEquals(flags.fd_readwrite_hangup, true);
   });
 
   await t.step("fd_readwrite_hangup is false", () => {
-    const flags = new Eventrwflags(Value(0));
+    const flags = new Eventrwflags(toValue(0));
     assertEquals(flags.fd_readwrite_hangup, false);
   });
 });
@@ -154,8 +159,8 @@ Deno.test("event_fd_readwrite", async (t) => {
     assertEquals(
       EventFdReadwrite.cast(memory, toPointer(pointer), offset),
       new EventFdReadwrite({
-        nbytes: new Filesize(BigValue(1024n)),
-        flags: new Eventrwflags(Value(1)),
+        nbytes: new Filesize(toBigValue(1024n)),
+        flags: new Eventrwflags(toValue(1)),
       }),
     );
   });
@@ -166,7 +171,7 @@ Deno.test("event_fd_readwrite", async (t) => {
     const offset = 8;
 
     const content = new EventFdReadwrite({
-      nbytes: new Filesize(BigValue(128n)),
+      nbytes: new Filesize(toBigValue(128n)),
       flags: new Eventrwflags(Eventrwflags.fd_readwrite_hangup),
     });
     content.store(memory, toPointer(pointer), offset);
@@ -251,12 +256,12 @@ Deno.test("event", async (t) => {
     assertEquals(
       Event.cast(memory, toPointer(pointer), offset),
       new Event({
-        userdata: new Userdata(BigValue(100n)),
+        userdata: new Userdata(toBigValue(100n)),
         error: new Errno(Errno.notsup),
         type: new Eventtype(Eventtype.fd_write),
         fd_readwrite: new EventFdReadwrite({
-          nbytes: new Filesize(BigValue(1024n)),
-          flags: new Eventrwflags(Value(1)),
+          nbytes: new Filesize(toBigValue(1024n)),
+          flags: new Eventrwflags(toValue(1)),
         }),
       }),
     );
@@ -268,11 +273,11 @@ Deno.test("event", async (t) => {
     const offset = 8;
 
     const event = new Event({
-      userdata: new Userdata(BigValue(100n)),
+      userdata: new Userdata(toBigValue(100n)),
       error: new Errno(Errno.notsup),
       type: new Eventtype(Eventtype.fd_write),
       fd_readwrite: new EventFdReadwrite({
-        nbytes: new Filesize(BigValue(128n)),
+        nbytes: new Filesize(toBigValue(128n)),
         flags: new Eventrwflags(Eventrwflags.fd_readwrite_hangup),
       }),
     });
@@ -311,7 +316,7 @@ Deno.test("fdflags", async (t) => {
 
     assertEquals(
       Fdflags.cast(memory, toPointer(pointer), offset),
-      new Fdflags(Value(10)),
+      new Fdflags(toValue(10)),
     );
   });
 
@@ -330,27 +335,27 @@ Deno.test("fdflags", async (t) => {
   });
 
   await t.step("append", () => {
-    const flags = new Fdflags(Value(Fdflags.append));
+    const flags = new Fdflags(toValue(Fdflags.append));
     assertEquals(flags.append, true);
   });
 
   await t.step("dsync", () => {
-    const flags = new Fdflags(Value(Fdflags.dsync));
+    const flags = new Fdflags(toValue(Fdflags.dsync));
     assertEquals(flags.dsync, true);
   });
 
   await t.step("nonblock", () => {
-    const flags = new Fdflags(Value(Fdflags.nonblock));
+    const flags = new Fdflags(toValue(Fdflags.nonblock));
     assertEquals(flags.nonblock, true);
   });
 
   await t.step("rsync", () => {
-    const flags = new Fdflags(Value(Fdflags.rsync));
+    const flags = new Fdflags(toValue(Fdflags.rsync));
     assertEquals(flags.rsync, true);
   });
 
   await t.step("sync", () => {
-    const flags = new Fdflags(Value(Fdflags.sync));
+    const flags = new Fdflags(toValue(Fdflags.sync));
     assertEquals(flags.sync, true);
   });
 });
@@ -365,7 +370,7 @@ Deno.test("rights", async (t) => {
     data.setBigUint64(addOffset(pointer, offset), 1_000_000n, true);
     assertEquals(
       Rights.cast(memory, toPointer(pointer), offset),
-      new Rights(BigValue(1_000_000n)),
+      new Rights(toBigValue(1_000_000n)),
     );
   });
 
@@ -553,13 +558,61 @@ Deno.test("filetype", async (t) => {
     const pointer = randomPointer(Filetype);
     const offset = 8;
 
-    const filetype = new Filetype(Value(100));
+    const filetype = new Filetype(toValue(100));
     filetype.store(memory, toPointer(pointer), offset);
 
     assertEquals(
       new Uint8Array(memory.buffer, addOffset(pointer, offset), Filetype.size),
       new Uint8Array([100]),
     );
+  });
+
+  await t.step("unknown", () => {
+    const type = new Filetype(Filetype.unknown);
+
+    assertEquals(type.unknown, true);
+  });
+
+  await t.step("block_device", () => {
+    const type = new Filetype(Filetype.block_device);
+
+    assertEquals(type.block_device, true);
+  });
+
+  await t.step("character_device", () => {
+    const type = new Filetype(Filetype.character_device);
+
+    assertEquals(type.character_device, true);
+  });
+
+  await t.step("directory", () => {
+    const type = new Filetype(Filetype.directory);
+
+    assertEquals(type.directory, true);
+  });
+
+  await t.step("regular_file", () => {
+    const type = new Filetype(Filetype.regular_file);
+
+    assertEquals(type.regular_file, true);
+  });
+
+  await t.step("socket_dgram", () => {
+    const type = new Filetype(Filetype.socket_dgram);
+
+    assertEquals(type.socket_dgram, true);
+  });
+
+  await t.step("socket_stream", () => {
+    const type = new Filetype(Filetype.socket_stream);
+
+    assertEquals(type.socket_stream, true);
+  });
+
+  await t.step("symbolic_link", () => {
+    const type = new Filetype(Filetype.symbolic_link);
+
+    assertEquals(type.symbolic_link, true);
   });
 });
 
@@ -625,7 +678,7 @@ Deno.test("preopentype", async (t) => {
 
     assertEquals(
       Preopentype.cast(memory, toPointer(pointer), offset),
-      new Preopentype(Value(1)),
+      new Preopentype(toValue(1)),
     );
   });
 
@@ -634,7 +687,7 @@ Deno.test("preopentype", async (t) => {
     const pointer = randomPointer(Preopentype);
     const offset = 8;
 
-    const opentype = new Preopentype(Value(1));
+    const opentype = new Preopentype(toValue(1));
     opentype.store(memory, toPointer(pointer), offset);
 
     assertEquals(
@@ -659,7 +712,7 @@ Deno.test("prestat_dir", async (t) => {
 
     assertEquals(
       PrestatDir.cast(memory, toPointer(pointer), offset),
-      new PrestatDir({ pr_name_len: new Size(Value(16)) }),
+      new PrestatDir({ pr_name_len: new Size(toValue(16)) }),
     );
   });
 
@@ -669,7 +722,7 @@ Deno.test("prestat_dir", async (t) => {
     const offset = 8;
 
     const prestat = new PrestatDir({
-      pr_name_len: new Size(Value(16)),
+      pr_name_len: new Size(toValue(16)),
     });
     prestat.store(memory, pointer, offset);
 
@@ -699,8 +752,8 @@ Deno.test("prestat", async (t) => {
     assertEquals(
       Prestat.cast(memory, toPointer(pointer), offset),
       new Prestat({
-        type: new Preopentype(Value(1)),
-        content: new PrestatDir({ pr_name_len: new Size(Value(16)) }),
+        type: new Preopentype(toValue(1)),
+        content: new PrestatDir({ pr_name_len: new Size(toValue(16)) }),
       }),
     );
   });
@@ -711,8 +764,8 @@ Deno.test("prestat", async (t) => {
     const offset = 8;
 
     const stat = new Prestat({
-      type: new Preopentype(Value(1)),
-      content: new PrestatDir({ pr_name_len: new Size(Value(16)) }),
+      type: new Preopentype(toValue(1)),
+      content: new PrestatDir({ pr_name_len: new Size(toValue(16)) }),
     });
     stat.store(memory, toPointer(pointer), offset);
 
@@ -737,7 +790,7 @@ Deno.test("userdata", async (t) => {
 
     assertEquals(
       Userdata.cast(memory, toPointer(pointer), offset),
-      new Userdata(BigValue(1n)),
+      new Userdata(toBigValue(1n)),
     );
   });
 
@@ -746,7 +799,7 @@ Deno.test("userdata", async (t) => {
     const pointer = randomPointer(Userdata);
     const offset = 8;
 
-    const data = new Userdata(BigValue(1n));
+    const data = new Userdata(toBigValue(1n));
     data.store(memory, toPointer(pointer), offset);
 
     assertEquals(
@@ -754,36 +807,6 @@ Deno.test("userdata", async (t) => {
       new Uint8Array([
         ...[1, 0, 0, 0, 0, 0, 0, 0],
       ]),
-    );
-  });
-});
-
-Deno.test("u8", async (t) => {
-  await t.step("cast()", () => {
-    const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(U8);
-    const offset = 8;
-
-    const data = new DataView(memory.buffer);
-    data.setUint8(addOffset(pointer, offset), 128);
-
-    assertEquals(
-      U8.cast(memory, toPointer(pointer), offset),
-      new U8(Value(128)),
-    );
-  });
-
-  await t.step("store()", () => {
-    const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(U8);
-    const offset = 8;
-
-    const u8 = new U8(Value(128));
-    u8.store(memory, toPointer(pointer), offset);
-
-    assertEquals(
-      new Uint8Array(memory.buffer, addOffset(pointer, offset), U8.size),
-      new Uint8Array([128]),
     );
   });
 });
@@ -799,7 +822,7 @@ Deno.test("size", async (t) => {
 
     assertEquals(
       Size.cast(memory, toPointer(pointer), offset),
-      new Size(Value(1024)),
+      new Size(toValue(1024)),
     );
   });
 
@@ -808,7 +831,7 @@ Deno.test("size", async (t) => {
     const pointer = randomPointer(Size);
     const offset = 8;
 
-    const size = new Size(Value(128));
+    const size = new Size(toValue(128));
     size.store(memory, toPointer(pointer), offset);
 
     assertEquals(
@@ -829,7 +852,7 @@ Deno.test("filesize", async (t) => {
 
     assertEquals(
       Filesize.cast(memory, toPointer(pointer), offset),
-      new Filesize(BigValue(1024n)),
+      new Filesize(toBigValue(1024n)),
     );
   });
   await t.step("cast()", () => {
@@ -837,7 +860,7 @@ Deno.test("filesize", async (t) => {
     const pointer = randomPointer(Filesize);
     const offset = 8;
 
-    const size = new Filesize(BigValue(128n));
+    const size = new Filesize(toBigValue(128n));
     size.store(memory, toPointer(pointer), offset);
 
     assertEquals(
@@ -858,7 +881,7 @@ Deno.test("timestamp", async (t) => {
 
     assertEquals(
       Timestamp.cast(memory, toPointer(pointer), offset),
-      new Timestamp(BigValue(100n)),
+      new Timestamp(toBigValue(100n)),
     );
   });
 
@@ -867,7 +890,7 @@ Deno.test("timestamp", async (t) => {
     const pointer = randomPointer(Timestamp);
     const offset = 8;
 
-    const timestamp = new Timestamp(BigValue(100n));
+    const timestamp = new Timestamp(toBigValue(100n));
     timestamp.store(memory, toPointer(pointer), offset);
 
     assertEquals(
@@ -954,7 +977,7 @@ Deno.test("subclockflags", async (t) => {
 
     assertEquals(
       Subclockflags.cast(memory, toPointer(pointer), offset),
-      new Subclockflags(Value(1)),
+      new Subclockflags(toValue(1)),
     );
   });
 
@@ -963,7 +986,7 @@ Deno.test("subclockflags", async (t) => {
     const pointer = randomPointer(Subclockflags);
     const offset = 8;
 
-    const flags = new Subclockflags(Value(1));
+    const flags = new Subclockflags(toValue(1));
     flags.store(memory, toPointer(pointer), offset);
 
     assertEquals(
@@ -978,7 +1001,7 @@ Deno.test("subclockflags", async (t) => {
 
   await t.step("subscription_clock_abstime", () => {
     const flags = new Subclockflags(
-      Value(Subclockflags.subscription_clock_abstime),
+      toValue(Subclockflags.subscription_clock_abstime),
     );
     assertEquals(
       flags.subscription_clock_abstime,
@@ -1007,8 +1030,8 @@ Deno.test("subscription_clock", async (t) => {
 
     const clock = new SubscriptionClock({
       id: new Clockid(Clockid.process_cputime_id),
-      timeout: new Timestamp(BigValue(100n)),
-      precision: new Timestamp(BigValue(200n)),
+      timeout: new Timestamp(toBigValue(100n)),
+      precision: new Timestamp(toBigValue(200n)),
       flags: new Subclockflags(Subclockflags.subscription_clock_abstime),
     });
     clock.store(memory, toPointer(pointer), offset);
@@ -1044,7 +1067,7 @@ Deno.test("fd", async (t) => {
 
     assertEquals(
       Fd.cast(memory, toPointer(pointer), offset),
-      new Fd(Value(1)),
+      new Fd(toValue(1)),
     );
   });
 
@@ -1117,7 +1140,7 @@ Deno.test("subscription_u", async (t) => {
         new SubscriptionU({
           type: new Eventtype(Eventtype.fd_write),
           content: new SubscriptionFdReadwrite({
-            fd: new Fd(Value(5)),
+            fd: new Fd(toValue(5)),
           }),
         }),
       );
@@ -1141,8 +1164,8 @@ Deno.test("subscription_u", async (t) => {
           type: new Eventtype(Eventtype.clock),
           content: new SubscriptionClock({
             id: new Clockid(Clockid.thread_cputime_id),
-            timeout: new Timestamp(BigValue(100n)),
-            precision: new Timestamp(BigValue(200n)),
+            timeout: new Timestamp(toBigValue(100n)),
+            precision: new Timestamp(toBigValue(200n)),
             flags: new Subclockflags(Subclockflags.subscription_clock_abstime),
           }),
         }),
@@ -1159,7 +1182,7 @@ Deno.test("subscription_u", async (t) => {
       const u = new SubscriptionU({
         type: new Eventtype(Eventtype.fd_write),
         content: new SubscriptionFdReadwrite({
-          fd: new Fd(Value(5)),
+          fd: new Fd(toValue(5)),
         }),
       });
       u.store(memory, toPointer(pointer), offset);
@@ -1191,8 +1214,8 @@ Deno.test("subscription_u", async (t) => {
         type: new Eventtype(Eventtype.clock),
         content: new SubscriptionClock({
           id: new Clockid(Clockid.thread_cputime_id),
-          timeout: new Timestamp(BigValue(100n)),
-          precision: new Timestamp(BigValue(200n)),
+          timeout: new Timestamp(toBigValue(100n)),
+          precision: new Timestamp(toBigValue(200n)),
           flags: new Subclockflags(Subclockflags.subscription_clock_abstime),
         }),
       });
@@ -1232,11 +1255,11 @@ Deno.test("subscription", async (t) => {
     assertEquals(
       Subscription.cast(memory, toPointer(pointer), offset),
       new Subscription({
-        userdata: new Userdata(BigValue(100n)),
+        userdata: new Userdata(toBigValue(100n)),
         u: new SubscriptionU({
           type: new Eventtype(Eventtype.fd_write),
           content: new SubscriptionFdReadwrite({
-            fd: new Fd(Value(5)),
+            fd: new Fd(toValue(5)),
           }),
         }),
       }),
@@ -1249,11 +1272,11 @@ Deno.test("subscription", async (t) => {
     const offset = 8;
 
     const subscription = new Subscription({
-      userdata: new Userdata(BigValue(100n)),
+      userdata: new Userdata(toBigValue(100n)),
       u: new SubscriptionU({
         type: new Eventtype(Eventtype.fd_write),
         content: new SubscriptionFdReadwrite({
-          fd: new Fd(Value(5)),
+          fd: new Fd(toValue(5)),
         }),
       }),
     });
@@ -1306,6 +1329,257 @@ Deno.test("errno", async (t) => {
     assertEquals(
       new Uint8Array(memory.buffer, addOffset(pointer, offset), Errno.size),
       new Uint8Array([8, 0]),
+    );
+  });
+});
+
+Deno.test("dircookie", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 1024n, true);
+
+    assertEquals(
+      Dircookie.cast(memory, toPointer(pointer), offset),
+      new Dircookie(toBigValue(1024n)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const cookie = new Dircookie(toBigValue(100n));
+    cookie.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), Dircookie.size),
+      new Uint8Array([100, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("lookupflags", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint32(
+      addOffset(pointer, offset),
+      Lookupflags.symlink_follow,
+      true,
+    );
+
+    assertEquals(
+      Lookupflags.cast(memory, toPointer(pointer), offset),
+      new Lookupflags(toValue(1)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const flags = new Lookupflags(toValue(1));
+    flags.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(
+        memory.buffer,
+        addOffset(pointer, offset),
+        Lookupflags.size,
+      ),
+      new Uint8Array([1, 0, 0, 0]),
+    );
+  });
+
+  await t.step("symlink_follow", () => {
+    const flags = new Lookupflags(Lookupflags.symlink_follow);
+
+    assertEquals(
+      flags.symlink_follow,
+      true,
+    );
+  });
+});
+
+Deno.test("device", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 1024n, true);
+
+    assertEquals(
+      Device.cast(memory, toPointer(pointer), offset),
+      new Device(toBigValue(1024n)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const device = new Device(toBigValue(128n));
+    device.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(
+        memory.buffer,
+        addOffset(pointer, offset),
+        Device.size,
+      ),
+      new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("inode", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 1024n, true);
+
+    assertEquals(
+      Inode.cast(memory, toPointer(pointer), offset),
+      new Inode(toBigValue(1024n)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const inode = new Inode(toBigValue(128n));
+    inode.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(
+        memory.buffer,
+        addOffset(pointer, offset),
+        Inode.size,
+      ),
+      new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("linkcount", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 1024n, true);
+
+    assertEquals(
+      Linkcount.cast(memory, toPointer(pointer), offset),
+      new Linkcount(toBigValue(1024n)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const linkcount = new Linkcount(toBigValue(128n));
+    linkcount.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(
+        memory.buffer,
+        addOffset(pointer, offset),
+        Linkcount.size,
+      ),
+      new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("filestat", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 1024n, true);
+    data.setBigUint64(addOffset(pointer, offset + 8), 2048n, true);
+    data.setUint8(addOffset(pointer, offset + 16), 2);
+    data.setBigUint64(addOffset(pointer, offset + 24), 10n, true);
+    data.setBigUint64(addOffset(pointer, offset + 32), 4096n, true);
+    data.setBigUint64(addOffset(pointer, offset + 40), 1705256117684n, true);
+    data.setBigUint64(addOffset(pointer, offset + 48), 1705256117685n, true);
+    data.setBigUint64(addOffset(pointer, offset + 56), 1705256117686n, true);
+
+    assertEquals(
+      Filestat.cast(memory, toPointer(pointer), offset),
+      new Filestat({
+        dev: new Device(toBigValue(1024n)),
+        ino: new Inode(toBigValue(2048n)),
+        filetype: new Filetype(Filetype.character_device),
+        nlink: new Linkcount(toBigValue(10n)),
+        size: new Filesize(toBigValue(4096n)),
+        atim: new Timestamp(toBigValue(1705256117684n)),
+        mtim: new Timestamp(toBigValue(1705256117685n)),
+        ctim: new Timestamp(toBigValue(1705256117686n)),
+      }),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const stat = new Filestat({
+      dev: new Device(toBigValue(32n)),
+      ino: new Inode(toBigValue(64n)),
+      filetype: new Filetype(Filetype.character_device),
+      nlink: new Linkcount(toBigValue(10n)),
+      size: new Filesize(toBigValue(128n)),
+      atim: new Timestamp(toBigValue(11n)),
+      mtim: new Timestamp(toBigValue(12n)),
+      ctim: new Timestamp(toBigValue(13n)),
+    });
+    stat.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), Filestat.size),
+      new Uint8Array([
+        // dev
+        ...[32, 0, 0, 0, 0, 0, 0, 0],
+        // ino
+        ...[64, 0, 0, 0, 0, 0, 0, 0],
+        // filetype
+        ...[2, 0, 0, 0, 0, 0, 0, 0],
+        // nlink
+        ...[10, 0, 0, 0, 0, 0, 0, 0],
+        // size
+        ...[128, 0, 0, 0, 0, 0, 0, 0],
+        // atim
+        ...[11, 0, 0, 0, 0, 0, 0, 0],
+        // mtim
+        ...[12, 0, 0, 0, 0, 0, 0, 0],
+        // ctim
+        ...[13, 0, 0, 0, 0, 0, 0, 0],
+      ]),
     );
   });
 });

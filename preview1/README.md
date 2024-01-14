@@ -19,20 +19,20 @@
 - [x] `fd_pread`
 - [x] `fd_pwrite`
 - [x] `fd_read`
-- [ ] `fd_readdir`
+- [x] `fd_readdir`
 - [ ] `fd_seek`
 - [x] `fd_filestat_get`
 - [x] `fd_write`
 - [ ] `fd_sync`
 - [ ] `path_create_directory`
-- [ ] `path_filestat_get`
+- [x] `path_filestat_get`
 - [ ] `path_filestat_set_times`
 - [ ] `path_readlink`
 - [ ] `path_remove_directory`
 - [ ] `path_rename`
 - [ ] `path_symlink`
 - [ ] `path_unlink_file`
-- [ ] `path_open`
+- [x] `path_open`
 - [ ] `random_get`
 - [x] `fd_fdstat_get`
 - [x] `fd_fdstat_set_flags`
