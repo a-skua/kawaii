@@ -1,3 +1,4 @@
+import * as FS from "./fs.ts";
 import {
   BigValue,
   Ciovec,
@@ -16,6 +17,7 @@ import {
   Filetype,
   IovecArray,
   Lookupflags,
+  Oflags,
   Pointer,
   Prestat,
   Rights,
@@ -127,16 +129,10 @@ export function clock_time_get(
 ): Value<Errno> {
   const clockid = new Clockid(id);
   if (clockid.realtime) {
-    const ns = new Timestamp(
-      BigInt(new Date().getTime()) * 1_000_000n as BigValue<Timestamp>,
-    );
-    ns.store(memory, result);
+    Timestamp.realtime().store(memory, result);
     return Errno.success;
   } else if (clockid.monotonic) {
-    const ns = new Timestamp(
-      BigInt(performance.now()) * 1_000_000n as BigValue<Timestamp>,
-    );
-    ns.store(memory, result);
+    Timestamp.monotonic().store(memory, result);
     return Errno.success;
   } else {
     return Errno.notsup;
@@ -197,15 +193,16 @@ export function fd_write(
   iovs_size: Value<Size>,
   result: Pointer<Size>,
 ): Value<Errno> {
-  const array = new Uint8Array(memory.buffer);
   let str = "";
   let len = 0;
 
   for (let i = 0; i < iovs_size; i++) {
     const iov = Ciovec.cast(memory, iovs, Ciovec.size * i);
 
-    str += decoder.decode(array.subarray(iov.buf, iov.buf + iov.len.value));
-    len += iov.len.value;
+    str += decoder.decode(
+      new Uint8Array(memory.buffer, iov.buf, iov.buf_len.value),
+    );
+    len += iov.buf_len.value;
   }
 
   switch (fd) {
@@ -219,8 +216,8 @@ export function fd_write(
       return Errno.badf;
   }
 
-  const data = new DataView(memory.buffer);
-  data.setUint32(result, len, true);
+  (new Size(len as Value<Size>)).store(memory, result);
+
   return Errno.success;
 }
 
@@ -451,7 +448,7 @@ export function fd_readdir(
   return Errno.notsup;
 }
 
-// Return the attributes of a file or directory. Note: This is similar to stat
+// Return the attributes of a file or directory. Note: This is similar to `stat`
 // in POSIX.
 export function path_filestat_get(
   _fd: Value<Fd>,
@@ -461,17 +458,54 @@ export function path_filestat_get(
   path_buf: Pointer<U8<string>>,
   path_len: Value<Size>,
   // The buffer where the file's attributes are stored.
-  _result: Pointer<Filestat>,
+  result: Pointer<Filestat>,
 ): Value<Errno> {
   const path = decoder.decode(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
-  console.debug("DEBUG", "path:", path, path.length);
-  return Errno.notsup;
+
+  const file = FS.find(path);
+  if (!file) {
+    return Errno.notsup;
+  }
+
+  file.wasi_filestat().store(memory, result);
+  return Errno.success;
 }
 
-// TODO
-export function path_open(): Value<Errno> {
+// Open a file or directory. The returned file descriptor is not guaranteed to
+// be the lowest-numbered file descriptor not currently open; it is randomized
+// to prevent applications from depending on making assumptions about indexes,
+// since this is error-prone in multi-threaded contexts. The returned file
+// descriptor is guaranteed to be less than 2**31. Note: This is similar to
+// `openat` in POSIX.
+export function path_open(
+  _fd: Value<Fd>,
+  // Flags determining the method of how the path is resolved.
+  _dirflags: Value<Lookupflags>,
+  // The relative path of the file or directory to open, relative to the
+  // `path_open::fd` directory.
+  path_buf: Pointer<U8<string>>,
+  path_len: Value<Size>,
+  // The method by which to open the file.
+  _oflags: Value<Oflags>,
+  // The initial rights of the newly created file descriptor. The implementation
+  // is allowed to return a file descriptor with fewer rights than specified, if
+  // and only if those rights do not apply to the type of file being opened. The
+  // base rights are rights that will apply to operations using the file
+  // descriptor itself, while the inheriting rights are rights that apply to
+  // file descriptors derived from it.
+  _fs_rights_base: BigValue<Rights>,
+  _fs_rights_inheriting: BigValue<Rights>,
+  _fdflags: Value<Fdflags>,
+  // The file descriptor of the file that has been opened.
+  _result: Pointer<Fd>,
+): Value<Errno> {
+  const path = decoder.decode(
+    new Uint8Array(memory.buffer, path_buf, path_len),
+  );
+  console.debug(path);
+
   return Errno.notsup;
 }
 

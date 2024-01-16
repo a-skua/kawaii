@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.204.0/assert/mod.ts";
+import { assertEquals } from "assert";
 import {
   BigValue,
   Ciovec,
@@ -18,8 +18,10 @@ import {
   Filestat,
   Filetype,
   Inode,
+  Iovec,
   Linkcount,
   Lookupflags,
+  Oflags,
   Pointer,
   Preopentype,
   Prestat,
@@ -60,6 +62,48 @@ const addOffset = <T extends Data<string>>(
   offset: number,
 ): Pointer<T> => toPointer(pointer + offset);
 
+Deno.test("iovec", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Iovec);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint32(addOffset(pointer, offset), pointer, true);
+    data.setUint32(addOffset(pointer, offset + 4), 16, true);
+
+    assertEquals(
+      Iovec.cast(memory, toPointer(pointer), offset),
+      new Iovec({
+        buf: toPointer(pointer),
+        buf_len: new Size(toValue(16)),
+      }),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Iovec);
+    const offset = 8;
+
+    const iovec = new Iovec({
+      buf: toPointer(100),
+      buf_len: new Size(toValue(32)),
+    });
+    iovec.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), Iovec.size),
+      new Uint8Array([
+        // buf
+        ...[100, 0, 0, 0],
+        // len
+        ...[32, 0, 0, 0],
+      ]),
+    );
+  });
+});
+
 Deno.test("ciovec", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
@@ -74,7 +118,7 @@ Deno.test("ciovec", async (t) => {
       Ciovec.cast(memory, toPointer(pointer), offset),
       new Ciovec({
         buf: toPointer(pointer),
-        len: new Size(toValue(16)),
+        buf_len: new Size(toValue(16)),
       }),
     );
   });
@@ -86,7 +130,7 @@ Deno.test("ciovec", async (t) => {
 
     const iovec = new Ciovec({
       buf: toPointer(100),
-      len: new Size(toValue(32)),
+      buf_len: new Size(toValue(32)),
     });
     iovec.store(memory, toPointer(pointer), offset);
 
@@ -898,6 +942,24 @@ Deno.test("timestamp", async (t) => {
       new Uint8Array([100, 0, 0, 0, 0, 0, 0, 0]),
     );
   });
+
+  await t.step("realtime", () => {
+    assertEquals(
+      Timestamp.realtime(),
+      new Timestamp(
+        BigInt(new Date().getTime()) * 1_000_000n as BigValue<Timestamp>,
+      ),
+    );
+  });
+
+  await t.step("monotonic", () => {
+    assertEquals(
+      Timestamp.monotonic(),
+      new Timestamp(
+        BigInt(performance.now()) * 1_000_000n as BigValue<Timestamp>,
+      ),
+    );
+  });
 });
 
 Deno.test("clockid", async (t) => {
@@ -1447,7 +1509,7 @@ Deno.test("device", async (t) => {
 Deno.test("inode", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Inode);
     const offset = 8;
 
     const data = new DataView(memory.buffer);
@@ -1461,7 +1523,7 @@ Deno.test("inode", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Inode);
     const offset = 8;
 
     const inode = new Inode(toBigValue(128n));
@@ -1481,7 +1543,7 @@ Deno.test("inode", async (t) => {
 Deno.test("linkcount", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Linkcount);
     const offset = 8;
 
     const data = new DataView(memory.buffer);
@@ -1495,7 +1557,7 @@ Deno.test("linkcount", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Linkcount);
     const offset = 8;
 
     const linkcount = new Linkcount(toBigValue(128n));
@@ -1515,7 +1577,7 @@ Deno.test("linkcount", async (t) => {
 Deno.test("filestat", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Filestat);
     const offset = 8;
 
     const data = new DataView(memory.buffer);
@@ -1545,7 +1607,7 @@ Deno.test("filestat", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Filestat);
     const offset = 8;
 
     const stat = new Filestat({
@@ -1581,5 +1643,60 @@ Deno.test("filestat", async (t) => {
         ...[13, 0, 0, 0, 0, 0, 0, 0],
       ]),
     );
+  });
+});
+
+Deno.test("oflags", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint16(addOffset(pointer, offset), 1, true);
+    data.setUint16(addOffset(pointer, offset + 2), 1, true);
+
+    assertEquals(
+      Oflags.cast(memory, toPointer(pointer), offset),
+      new Oflags(toValue(1)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Errno);
+    const offset = 8;
+
+    const flags = new Oflags(Oflags.directory);
+    flags.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), Oflags.size),
+      new Uint8Array([2, 0]),
+    );
+  });
+
+  await t.step("creat", () => {
+    const flags = new Oflags(Oflags.creat);
+
+    assertEquals(flags.creat, true);
+  });
+
+  await t.step("directory", () => {
+    const flags = new Oflags(Oflags.directory);
+
+    assertEquals(flags.directory, true);
+  });
+
+  await t.step("excl", () => {
+    const flags = new Oflags(Oflags.excl);
+
+    assertEquals(flags.excl, true);
+  });
+
+  await t.step("trunc", () => {
+    const flags = new Oflags(Oflags.trunc);
+
+    assertEquals(flags.trunc, true);
   });
 });

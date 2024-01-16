@@ -46,6 +46,7 @@ export type BigValue<T extends Data<string>> = bigint & { __bigValue: T };
 // U8
 export abstract class U8<T extends string> implements Data<T> {
   abstract readonly __data: T;
+  readonly __bites = 8;
 
   static readonly size = 1;
   static readonly alignment = 1;
@@ -69,8 +70,35 @@ export abstract class U8<T extends string> implements Data<T> {
   }
 }
 
+abstract class U16<T extends string> implements Data<T> {
+  abstract readonly __data: T;
+  readonly __bites = 16;
+
+  static readonly size = 2;
+  static readonly alignment = 2;
+
+  constructor(
+    readonly value: Value<U16<T>>,
+  ) {}
+
+  store(mem: Memory, ptr: Pointer<U16<T>>, offset: Offset = 0) {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), U16.size);
+    data.setUint16(0, this.value, true);
+  }
+
+  protected static getValue(
+    mem: Memory,
+    ptr: Pointer<U16<string>>,
+    offset: Offset,
+  ): Value<U16<string>> {
+    const data = new DataView(mem.buffer, addOffset(ptr, offset), U16.size);
+    return data.getUint16(0, true) as Value<U16<string>>;
+  }
+}
+
 abstract class U32<T extends string> implements Data<T> {
   abstract readonly __data: T;
+  readonly __bites = 32;
 
   static readonly size = 4;
   static readonly alignment = 4;
@@ -96,6 +124,7 @@ abstract class U32<T extends string> implements Data<T> {
 
 abstract class U64<T extends string> implements Data<T> {
   abstract readonly __data: T;
+  readonly __bites = 32;
 
   static readonly size = 8;
   static readonly alignment = 8;
@@ -154,6 +183,18 @@ export class Filesize extends U64<"filesize"> {
 // Timestamp in nanoseconds.
 export class Timestamp extends U64<"timestamp"> {
   readonly __data = "timestamp";
+
+  static realtime(): Timestamp {
+    return new Timestamp(
+      BigInt(new Date().getTime()) * 1_000_000n as BigValue<Timestamp>,
+    );
+  }
+
+  static monotonic(): Timestamp {
+    return new Timestamp(
+      BigInt(performance.now()) * 1_000_000n as BigValue<Timestamp>,
+    );
+  }
 
   static cast(
     mem: Memory,
@@ -238,28 +279,15 @@ export class Clockid implements Data<"clockid"> {
 // Error codes returned by functions. Not all of these error codes are returned
 // by the functions provided by this API; some are used in higher-level library
 // layers, and others are provided merely for alignment with POSIX.
-export class Errno implements Data<"errno"> {
+export class Errno extends U16<"errno"> {
   readonly __data = "errno";
-
-  static readonly size = 2;
-  static readonly alignment = 2;
-
-  constructor(
-    readonly value: Value<Errno>,
-  ) {}
 
   static cast(
     mem: Memory,
     ptr: Pointer<Errno>,
     offset: Offset = 0,
   ): Errno {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Errno.size);
-    return new Errno(data.getUint16(0, true) as Value<Errno>);
-  }
-
-  store(mem: Memory, ptr: Pointer<Errno>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Errno.size);
-    data.setUint16(0, this.value, true);
+    return new Errno(this.getValue(mem, ptr, offset) as Value<Errno>);
   }
 
   // No error occurred. System call completed successfully.
@@ -782,50 +810,85 @@ export class Fd implements Data<"fd"> {
   static readonly stderr = 2 as Value<Fd>;
 }
 
-type InitIovec = {
+interface IovecParams {
   readonly buf: Pointer<U8<string>>;
-  readonly len: Size;
-};
+  readonly buf_len: Size;
+}
 
 // A region of memory for scatter/gather reads.
-export class Iovec implements Data<"iovec"> {
+export class Iovec implements Data<"iovec">, IovecParams {
   readonly __data = "iovec";
 
   static readonly size = 8;
   static readonly alignment = 4;
 
+  // The address of the buffer to be filled.
   readonly buf: Pointer<U8<string>>;
-  readonly len: Size;
 
-  constructor({ buf, len }: InitIovec) {
+  // The length of the buffer to be filled.
+  readonly buf_len: Size;
+
+  constructor({ buf, buf_len }: IovecParams) {
     this.buf = buf;
-    this.len = len;
+    this.buf_len = buf_len;
+  }
+
+  static cast(mem: Memory, ptr: Pointer<Iovec>, offset: Offset = 0): Iovec {
+    return new Iovec({
+      buf: Pointer.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Pointer<U8<string>>>,
+        offset,
+      ),
+      buf_len: Size.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Size>,
+        offset + 4,
+      ),
+    });
+  }
+
+  store(mem: Memory, ptr: Pointer<Iovec>, offset: Offset = 0) {
+    Pointer.store(
+      this.buf,
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Pointer<U8<string>>>,
+      offset,
+    );
+    this.buf_len.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Size>,
+      offset + 4,
+    );
   }
 }
 
 export class IovecArray extends Iovec {}
 
-type InitCiovec = {
+interface CiovecParams {
   readonly buf: Pointer<U8<string>>;
-  readonly len: Size;
-};
+  readonly buf_len: Size;
+}
 
 // A region of memory for scatter/gather writes.
-export class Ciovec implements Data<"ciovec"> {
+export class Ciovec implements Data<"ciovec">, CiovecParams {
   readonly __data = "ciovec";
 
   static readonly size = 8;
   static readonly alignment = 4;
 
+  // The address of the buffer to be written.
   readonly buf: Pointer<U8<string>>;
-  readonly len: Size;
+
+  // The length of the buffer to be written.
+  readonly buf_len: Size;
 
   constructor({
     buf,
-    len,
-  }: InitCiovec) {
+    buf_len,
+  }: CiovecParams) {
     this.buf = buf;
-    this.len = len;
+    this.buf_len = buf_len;
   }
 
   static cast(
@@ -839,7 +902,7 @@ export class Ciovec implements Data<"ciovec"> {
         ptr as Pointer<Data<string>> as Pointer<Pointer<U8<string>>>,
         offset,
       ),
-      len: Size.cast(
+      buf_len: Size.cast(
         mem,
         ptr as Pointer<Data<string>> as Pointer<Size>,
         offset + 4,
@@ -854,7 +917,7 @@ export class Ciovec implements Data<"ciovec"> {
       ptr as Pointer<Data<string>> as Pointer<Pointer<U8<string>>>,
       offset,
     );
-    this.len.store(
+    this.buf_len.store(
       mem,
       ptr as Pointer<Data<string>> as Pointer<Size>,
       offset + 4,
@@ -968,37 +1031,28 @@ export class Filetype extends U8<"filetype"> {
 }
 
 // File descriptor flags.
-export class Fdflags implements Data<"fdflags"> {
+export class Fdflags extends U16<"fdflags"> {
   readonly __data = "fdflags";
 
-  static readonly size = 2;
-  static readonly alignment = 2;
-
-  constructor(
-    private readonly flags: Value<Fdflags>,
-  ) {}
+  static zero(): Fdflags {
+    return new Fdflags(0 as Value<Fdflags>);
+  }
 
   static cast(
     mem: Memory,
     ptr: Pointer<Fdflags>,
     offset: Offset = 0,
   ): Fdflags {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fdflags.size);
     return new Fdflags(
-      data.getUint16(0, true) as Value<Fdflags>,
+      this.getValue(mem, ptr, offset) as Value<Fdflags>,
     );
-  }
-
-  store(mem: Memory, ptr: Pointer<Fdflags>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fdflags.size);
-    data.setUint16(0, this.flags, true);
   }
 
   // Append mode: Data written to the file is always appended to the file's end.
   static readonly append = 1 << 0 as Value<Fdflags>;
 
   get append(): boolean {
-    return (this.flags & Fdflags.append) > 0;
+    return (this.value & Fdflags.append) > 0;
   }
 
   // Write according to synchronized I/O data integrity completion. Only the
@@ -1006,21 +1060,21 @@ export class Fdflags implements Data<"fdflags"> {
   static readonly dsync = 1 << 1 as Value<Fdflags>;
 
   get dsync(): boolean {
-    return (this.flags & Fdflags.dsync) > 0;
+    return (this.value & Fdflags.dsync) > 0;
   }
 
   // Non-blocking mode
   static readonly nonblock = 1 << 2 as Value<Fdflags>;
 
   get nonblock(): boolean {
-    return (this.flags & Fdflags.nonblock) > 0;
+    return (this.value & Fdflags.nonblock) > 0;
   }
 
   // Synchronized read I/O operations.
   static readonly rsync = 1 << 3 as Value<Fdflags>;
 
   get rsync(): boolean {
-    return (this.flags & Fdflags.rsync) > 0;
+    return (this.value & Fdflags.rsync) > 0;
   }
 
   // Write according to synchronized I/O file integrity completion. In addition
@@ -1029,19 +1083,19 @@ export class Fdflags implements Data<"fdflags"> {
   static readonly sync = 1 << 4 as Value<Fdflags>;
 
   get sync(): boolean {
-    return (this.flags & Fdflags.sync) > 0;
+    return (this.value & Fdflags.sync) > 0;
   }
 }
 
-type InitFdstat = {
+interface FdstatParams {
   readonly fs_filetype: Filetype;
   readonly fs_flags: Fdflags;
   readonly fs_rights_base: Rights;
   readonly fs_rights_inheriting: Rights;
-};
+}
 
 // File descriptor attributes.
-export class Fdstat implements Data<"fdstat"> {
+export class Fdstat implements Data<"fdstat">, FdstatParams {
   readonly __data = "fdstat";
 
   static readonly size = 24;
@@ -1062,7 +1116,7 @@ export class Fdstat implements Data<"fdstat"> {
     fs_flags,
     fs_rights_base,
     fs_rights_inheriting,
-  }: InitFdstat) {
+  }: FdstatParams) {
     this.fs_filetype = fs_filetype;
     this.fs_flags = fs_flags;
     this.fs_rights_base = fs_rights_base;
@@ -1268,15 +1322,8 @@ export class Eventtype implements Data<"eventtype"> {
 
 // The state of the file descriptor subscribed to with eventtype::fd_read or
 // eventtype::fd_write.
-export class Eventrwflags implements Data<"eventrwflags"> {
+export class Eventrwflags extends U16<"eventrwflags"> {
   readonly __data = "eventrwflags";
-
-  static readonly size = 2;
-  static readonly alignment = 2;
-
-  constructor(
-    private readonly flags: Value<Eventrwflags>,
-  ) {}
 
   static zero(): Eventrwflags {
     return new Eventrwflags(0 as Value<Eventrwflags>);
@@ -1287,46 +1334,29 @@ export class Eventrwflags implements Data<"eventrwflags"> {
     ptr: Pointer<Eventrwflags>,
     offset: Offset = 0,
   ): Eventrwflags {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Eventrwflags.size,
-    );
     return new Eventrwflags(
-      data.getUint16(0, true) as Value<Eventrwflags>,
+      this.getValue(mem, ptr, offset) as Value<Eventrwflags>,
     );
-  }
-
-  store(
-    mem: Memory,
-    ptr: Pointer<Eventrwflags>,
-    offset: Offset = 0,
-  ) {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Eventrwflags.size,
-    );
-    data.setUint16(0, this.flags, true);
   }
 
   // peer of this socket has closed or disconnected.
   static readonly fd_readwrite_hangup = 1 as Value<Eventrwflags>;
 
   get fd_readwrite_hangup(): boolean {
-    return (this.flags & Eventrwflags.fd_readwrite_hangup) > 0;
+    return (this.value & Eventrwflags.fd_readwrite_hangup) > 0;
   }
 }
 
-type InitEventFdReadwrite = {
+interface EventFdReadwriteParams {
   readonly nbytes: Filesize;
   readonly flags: Eventrwflags;
-};
+}
 
 // event_fd_readwrite: Record
 //
 // The contents of an event when type is eventtype::fd_read or eventtype::fd_write.
-export class EventFdReadwrite implements Data<"event_fd_readwrite"> {
+export class EventFdReadwrite
+  implements Data<"event_fd_readwrite">, EventFdReadwriteParams {
   readonly __data = "event_fd_readwrite";
 
   static readonly size = 16;
@@ -1338,7 +1368,7 @@ export class EventFdReadwrite implements Data<"event_fd_readwrite"> {
   // The state of the file descriptor.
   readonly flags: Eventrwflags;
 
-  constructor({ nbytes, flags }: InitEventFdReadwrite) {
+  constructor({ nbytes, flags }: EventFdReadwriteParams) {
     this.nbytes = nbytes;
     this.flags = flags;
   }
@@ -1389,14 +1419,8 @@ export class EventFdReadwrite implements Data<"event_fd_readwrite"> {
 
 // Flags determining how to interpret the timestamp provided in
 // subscription_clock::timeout.
-export class Subclockflags implements Data<"subclockflags"> {
+export class Subclockflags extends U16<"subclockflags"> {
   readonly __data = "subclockflags";
-
-  static readonly size = 2;
-  static readonly alignment = 2;
-  constructor(
-    private readonly flags: Value<Subclockflags>,
-  ) {}
 
   static zero(): Subclockflags {
     return new Subclockflags(0 as Value<Subclockflags>);
@@ -1407,27 +1431,9 @@ export class Subclockflags implements Data<"subclockflags"> {
     ptr: Pointer<Subclockflags>,
     offset: Offset = 0,
   ): Subclockflags {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Subclockflags.size,
-    );
     return new Subclockflags(
-      data.getUint16(0, true) as Value<Subclockflags>,
+      this.getValue(mem, ptr, offset) as Value<Subclockflags>,
     );
-  }
-
-  store(
-    mem: Memory,
-    ptr: Pointer<Subclockflags>,
-    offset: Offset = 0,
-  ) {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Subclockflags.size,
-    );
-    data.setUint16(0, this.flags, true);
   }
 
   // set, treat the timestamp provided in subscription_clock::timeout as an
@@ -1437,19 +1443,20 @@ export class Subclockflags implements Data<"subclockflags"> {
   static readonly subscription_clock_abstime = 1 << 0 as Value<Subclockflags>;
 
   get subscription_clock_abstime(): boolean {
-    return (this.flags & Subclockflags.subscription_clock_abstime) > 0;
+    return (this.value & Subclockflags.subscription_clock_abstime) > 0;
   }
 }
 
-type InitSubscriptionClock = {
+interface SubscriptionClockParams {
   readonly id: Clockid;
   readonly timeout: Timestamp;
   readonly precision: Timestamp;
   readonly flags: Subclockflags;
-};
+}
 
 // The contents of a subscription when type is eventtype::clock.
-export class SubscriptionClock implements Data<"subscription_clock"> {
+export class SubscriptionClock
+  implements Data<"subscription_clock">, SubscriptionClockParams {
   readonly __data = "subscription_clock";
 
   static readonly size = 32;
@@ -1473,7 +1480,7 @@ export class SubscriptionClock implements Data<"subscription_clock"> {
     timeout,
     precision,
     flags,
-  }: InitSubscriptionClock) {
+  }: SubscriptionClockParams) {
     this.id = id;
     this.timeout = timeout;
     this.precision = precision;
@@ -1537,14 +1544,14 @@ export class SubscriptionClock implements Data<"subscription_clock"> {
   }
 }
 
-type InitSubscriptionFdReadwrite = {
+interface SubscriptionFdReadwriteParams {
   readonly fd: Fd;
-};
+}
 
 // The contents of a subscription when type is type is eventtype::fd_read or
 // eventtype::fd_write.
 export class SubscriptionFdReadwrite
-  implements Data<"subscription_fd_readwrite"> {
+  implements Data<"subscription_fd_readwrite">, SubscriptionFdReadwriteParams {
   readonly __data = "subscription_fd_readwrite";
 
   static readonly size = 4;
@@ -1556,7 +1563,7 @@ export class SubscriptionFdReadwrite
 
   constructor({
     fd,
-  }: InitSubscriptionFdReadwrite) {
+  }: SubscriptionFdReadwriteParams) {
     this.fd = fd;
   }
 
@@ -1579,13 +1586,14 @@ export class SubscriptionFdReadwrite
   }
 }
 
-type InitSubscriptionU = {
+interface SubscriptionUParams {
   readonly type: Eventtype;
   readonly content: SubscriptionClock | SubscriptionFdReadwrite;
-};
+}
 
 // The contents of a subscription.
-export class SubscriptionU implements Data<"subscription_u"> {
+export class SubscriptionU
+  implements Data<"subscription_u">, SubscriptionUParams {
   readonly __data = "subscription_u";
 
   static readonly size = 40;
@@ -1601,7 +1609,7 @@ export class SubscriptionU implements Data<"subscription_u"> {
   constructor({
     type,
     content,
-  }: InitSubscriptionU) {
+  }: SubscriptionUParams) {
     this.type = type;
     this.content = content;
   }
@@ -1657,13 +1665,13 @@ export class SubscriptionU implements Data<"subscription_u"> {
   }
 }
 
-type InitSubscription = {
+interface SubscriptionParams {
   readonly userdata: Userdata;
   readonly u: SubscriptionU;
-};
+}
 
 // Subscription to an event.
-export class Subscription implements Data<"subscription"> {
+export class Subscription implements Data<"subscription">, SubscriptionParams {
   readonly __data = "subscription";
 
   static readonly size = 48;
@@ -1679,7 +1687,7 @@ export class Subscription implements Data<"subscription"> {
   constructor({
     userdata,
     u,
-  }: InitSubscription) {
+  }: SubscriptionParams) {
     this.userdata = userdata;
     this.u = u;
   }
@@ -1721,17 +1729,17 @@ export class Subscription implements Data<"subscription"> {
   }
 }
 
-type InitEvent = {
+interface EventParams {
   readonly userdata: Userdata;
   readonly error: Errno;
   readonly type: Eventtype;
   readonly fd_readwrite: EventFdReadwrite;
-};
+}
 
 // event: Record
 //
 // An event that occurred.
-export class Event implements Data<"event"> {
+export class Event implements Data<"event">, EventParams {
   readonly __data = "event";
 
   static readonly size = 32;
@@ -1756,7 +1764,7 @@ export class Event implements Data<"event"> {
     error,
     type,
     fd_readwrite,
-  }: InitEvent) {
+  }: EventParams) {
     this.userdata = userdata;
     this.error = error;
     this.type = type;
@@ -1816,9 +1824,52 @@ export class Event implements Data<"event"> {
   }
 }
 
+// Open flags used by `path_open`.
+export class Oflags extends U16<"oflags"> {
+  readonly __data = "oflags";
+
+  static cast(mem: Memory, ptr: Pointer<Oflags>, offset: Offset = 0): Oflags {
+    return new Oflags(
+      this.getValue(mem, ptr, offset) as Value<Oflags>,
+    );
+  }
+
+  // Create file if it does not exist.
+  static creat = 1 << 0 as Value<Oflags>;
+
+  get creat(): boolean {
+    return (this.value & Oflags.creat) > 0;
+  }
+
+  // Fail if not a directory.
+  static directory = 1 << 1 as Value<Oflags>;
+
+  get directory(): boolean {
+    return (this.value & Oflags.directory) > 0;
+  }
+
+  // Fail if file already exists.
+  static excl = 1 << 2 as Value<Oflags>;
+
+  get excl(): boolean {
+    return (this.value & Oflags.excl) > 0;
+  }
+
+  // Truncate file to size 0.
+  static trunc = 1 << 3 as Value<Oflags>;
+
+  get trunc(): boolean {
+    return (this.value & Oflags.trunc) > 0;
+  }
+}
+
 // Number of hard links to an inode.
 export class Linkcount extends U64<"linkcount"> {
   readonly __data = "linkcount";
+
+  static zero(): Linkcount {
+    return new Linkcount(0n as BigValue<Linkcount>);
+  }
 
   static cast(
     mem: Memory,
@@ -1831,7 +1882,7 @@ export class Linkcount extends U64<"linkcount"> {
   }
 }
 
-type InitFilestat = {
+interface FilestatParams {
   readonly dev: Device;
   readonly ino: Inode;
   readonly filetype: Filetype;
@@ -1840,10 +1891,10 @@ type InitFilestat = {
   readonly atim: Timestamp;
   readonly mtim: Timestamp;
   readonly ctim: Timestamp;
-};
+}
 
 // File attributes.
-export class Filestat implements Data<"filestat"> {
+export class Filestat implements Data<"filestat">, FilestatParams {
   readonly __data = "filestat";
 
   static readonly size = 64;
@@ -1883,7 +1934,7 @@ export class Filestat implements Data<"filestat"> {
     atim,
     mtim,
     ctim,
-  }: InitFilestat) {
+  }: FilestatParams) {
     this.dev = dev;
     this.ino = ino;
     this.filetype = filetype;
@@ -2027,12 +2078,12 @@ export class Preopentype implements Data<"preopentype"> {
   }
 }
 
-type InitPrestatDir = {
+interface PrestatDirParams {
   readonly pr_name_len: Size;
-};
+}
 
 // The contents of a $prestat when type is `preopentype::dir`.
-export class PrestatDir implements Data<"prestat_dir"> {
+export class PrestatDir implements Data<"prestat_dir">, PrestatDirParams {
   readonly __data = "prestat_dir";
 
   static readonly size = 4;
@@ -2043,7 +2094,7 @@ export class PrestatDir implements Data<"prestat_dir"> {
 
   constructor({
     pr_name_len,
-  }: InitPrestatDir) {
+  }: PrestatDirParams) {
     this.pr_name_len = pr_name_len;
   }
 
@@ -2070,25 +2121,27 @@ export class PrestatDir implements Data<"prestat_dir"> {
   }
 }
 
-type InitPrestat = {
+interface PrestatParams {
   readonly type: Preopentype;
   readonly content: PrestatDir;
-};
+}
 
 // Information about a pre-opened capability.
-export class Prestat implements Data<"prestat"> {
+export class Prestat implements Data<"prestat">, PrestatParams {
   readonly __data = "prestat";
 
   static readonly size = 8;
   static readonly alignment = 4;
 
+  // Variant cases
+  // - dir: prestat_dir
   readonly type: Preopentype;
   readonly content: PrestatDir;
 
   constructor({
     type,
     content,
-  }: InitPrestat) {
+  }: PrestatParams) {
     this.type = type;
     this.content = content;
   }
