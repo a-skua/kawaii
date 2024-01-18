@@ -1,8 +1,12 @@
 import { assert, assertEquals } from "assert";
+import * as FS from "./fs.ts";
 import {
   BigValue,
   Clockid,
   Data,
+  Dircookie,
+  Dirent,
+  Dirnamlen,
   Errno,
   Event,
   EventFdReadwrite,
@@ -12,6 +16,7 @@ import {
   Fdflags,
   Fdstat,
   Filetype,
+  Inode,
   Pointer,
   Rights,
   Size,
@@ -33,9 +38,11 @@ import init, {
   environ_get,
   environ_sizes_get,
   Exit,
+  fd_close,
   fd_fdstat_get,
   fd_fdstat_set_flags,
   fd_prestat_get,
+  fd_readdir,
   fd_write,
   poll_oneoff,
   proc_exit,
@@ -43,13 +50,15 @@ import init, {
   sched_yield,
 } from "./mod.ts";
 
+const decoder = new TextDecoder();
+
 const toPointer = <T extends Data<string>>(p: number): Pointer<T> =>
   p as Pointer<T>;
 
-const BigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
+const toBigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
   v as BigValue<T>;
 
-const Value = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
+const toValue = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
 
 interface DataType {
   alignment: number;
@@ -79,9 +88,9 @@ Deno.test(sched_yield.name, () => {
 Deno.test(proc_exit.name, () => {
   let catched = false;
   try {
-    proc_exit(Value(1));
+    proc_exit(toValue(1));
   } catch (err) {
-    assertEquals(err, new Exit(new Exitcode(Value(1))));
+    assertEquals(err, new Exit(new Exitcode(toValue(1))));
     catched = true;
   }
 
@@ -137,7 +146,7 @@ Deno.test("clock_time_get", async (t) => {
     const pointer = 0;
 
     assertEquals(
-      clock_time_get(Clockid.realtime, BigValue(0n), toPointer(pointer)),
+      clock_time_get(Clockid.realtime, toBigValue(0n), toPointer(pointer)),
       Errno.success,
     );
     assertEquals(
@@ -149,7 +158,7 @@ Deno.test("clock_time_get", async (t) => {
   await t.step("monotonic", () => {
     const pointer = 8;
     assertEquals(
-      clock_time_get(Clockid.monotonic, BigValue(0n), toPointer(pointer)),
+      clock_time_get(Clockid.monotonic, toBigValue(0n), toPointer(pointer)),
       Errno.success,
     );
     assertEquals(
@@ -164,7 +173,7 @@ Deno.test("clock_time_get", async (t) => {
     assertEquals(
       clock_time_get(
         Clockid.process_cputime_id,
-        BigValue(0n),
+        toBigValue(0n),
         toPointer(pointer),
       ),
       Errno.notsup,
@@ -177,7 +186,7 @@ Deno.test("clock_time_get", async (t) => {
     assertEquals(
       clock_time_get(
         Clockid.thread_cputime_id,
-        BigValue(0n),
+        toBigValue(0n),
         toPointer(pointer),
       ),
       Errno.notsup,
@@ -249,7 +258,7 @@ Deno.test("fd_write", async (t) => {
     encoder.encodeInto("World", array.subarray(105));
 
     assertEquals(
-      fd_write(Fd.stdout, toPointer(4), Value(2), toPointer(0)),
+      fd_write(Fd.stdout, toPointer(4), toValue(2), toPointer(0)),
       Errno.success,
     );
     assertEquals(data.getUint32(0, true), 10);
@@ -266,7 +275,7 @@ Deno.test("fd_write", async (t) => {
     encoder.encodeInto("World!", array.subarray(107));
 
     assertEquals(
-      fd_write(Fd.stderr, toPointer(4), Value(2), toPointer(0)),
+      fd_write(Fd.stderr, toPointer(4), toValue(2), toPointer(0)),
       Errno.success,
     );
     assertEquals(data.getUint32(0, true), 13);
@@ -280,7 +289,7 @@ Deno.test(random_get.name, () => {
   init({ memory });
 
   assertEquals(
-    random_get(toPointer(100), Value(8)),
+    random_get(toPointer(100), toValue(8)),
     Errno.success,
   );
   assert(new Uint8Array(memory.buffer, 100, 8).reduce((sum, n) => sum + n) > 0);
@@ -289,7 +298,7 @@ Deno.test(random_get.name, () => {
 Deno.test("poll_oneoff", async (t) => {
   await t.step("nsubscriptions is 0", () => {
     assertEquals(
-      poll_oneoff(toPointer(0), toPointer(0), Value(0), toPointer(0)),
+      poll_oneoff(toPointer(0), toPointer(0), toValue(0), toPointer(0)),
       Errno.inval,
     );
   });
@@ -300,23 +309,23 @@ Deno.test("poll_oneoff", async (t) => {
 
     const subscriptions = [
       new Subscription({
-        userdata: new Userdata(BigValue(1n)),
+        userdata: new Userdata(toBigValue(1n)),
         u: new SubscriptionU({
           type: new Eventtype(Eventtype.clock),
           content: new SubscriptionClock({
             id: new Clockid(Clockid.realtime),
-            timeout: new Timestamp(BigValue(0n)),
-            precision: new Timestamp(BigValue(0n)),
+            timeout: new Timestamp(toBigValue(0n)),
+            precision: new Timestamp(toBigValue(0n)),
             flags: Subclockflags.zero(),
           }),
         }),
       }),
       new Subscription({
-        userdata: new Userdata(BigValue(2n)),
+        userdata: new Userdata(toBigValue(2n)),
         u: new SubscriptionU({
           type: new Eventtype(Eventtype.fd_read),
           content: new SubscriptionFdReadwrite({
-            fd: new Fd(Value(0)),
+            fd: new Fd(toValue(0)),
           }),
         }),
       }),
@@ -329,13 +338,13 @@ Deno.test("poll_oneoff", async (t) => {
     const out = 200;
     const events = [
       new Event({
-        userdata: new Userdata(BigValue(1n)),
+        userdata: new Userdata(toBigValue(1n)),
         error: new Errno(Errno.notsup),
         type: new Eventtype(Eventtype.clock),
         fd_readwrite: EventFdReadwrite.zero(),
       }),
       new Event({
-        userdata: new Userdata(BigValue(2n)),
+        userdata: new Userdata(toBigValue(2n)),
         error: new Errno(Errno.notsup),
         type: new Eventtype(Eventtype.fd_read),
         fd_readwrite: EventFdReadwrite.zero(),
@@ -348,14 +357,14 @@ Deno.test("poll_oneoff", async (t) => {
       poll_oneoff(
         toPointer(ins),
         toPointer(out),
-        Value(subscriptions.length),
+        toValue(subscriptions.length),
         toPointer(result),
       ),
       Errno.success,
     );
     assertEquals(
       Size.cast(memory, toPointer(result)),
-      new Size(Value(events.length)),
+      new Size(toValue(events.length)),
     );
     for (let i = 0; i < events.length; i += 1) {
       assertEquals(
@@ -426,7 +435,7 @@ Deno.test("fd_fdstat_get", async (t) => {
 
   await t.step("undefined", () => {
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
-    assertEquals(fd_fdstat_get(Value(3), pointer), Errno.badf);
+    assertEquals(fd_fdstat_get(toValue(3), pointer), Errno.badf);
   });
 });
 
@@ -465,12 +474,203 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
     init({ memory });
 
     assertEquals(
-      fd_fdstat_set_flags(Value(3), Fdflags.nonblock),
+      fd_fdstat_set_flags(toValue(3), Fdflags.nonblock),
       Errno.badf,
     );
   });
 });
 
 Deno.test("fd_prestat_get", () => {
-  assertEquals(fd_prestat_get(Value(0), toPointer(0)), Errno.badf);
+  assertEquals(fd_prestat_get(toValue(0), toPointer(0)), Errno.badf);
+});
+
+Deno.test("fd_readdir", async (t) => {
+  await t.step("not found file", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Dirent);
+    init({ memory });
+
+    assertEquals(
+      fd_readdir(
+        toValue(4),
+        toPointer(pointer),
+        toValue(100),
+        toBigValue(0n),
+        toPointer(0),
+      ),
+      Errno.badf,
+    );
+  });
+  await t.step("/test_fd_readdir", () => {
+    const dir = new FS.File({
+      name: new FS.FileName("test_fd_readdir"),
+      type: FS.File.type.dir,
+    }).append(
+      new FS.File({
+        name: new FS.FileName("test_file1"),
+        type: FS.File.type.regularFile,
+      }),
+      new FS.File({
+        name: new FS.FileName("test_file2"),
+        type: FS.File.type.regularFile,
+      }),
+      new FS.File({
+        name: new FS.FileName("test_file3"),
+        type: FS.File.type.regularFile,
+      }),
+    );
+    FS.File.root.append(dir);
+
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const fd = FS.open(dir);
+
+    assertEquals(
+      fd_readdir(
+        fd.value,
+        toPointer(200),
+        toValue(100),
+        toBigValue(0n),
+        toPointer(0),
+      ),
+      Errno.success,
+    );
+
+    assertEquals(
+      Size.cast(memory, toPointer(0)),
+      new Size(Dirent.size + 10),
+    );
+    assertEquals(
+      Dirent.cast(memory, toPointer(200), 0),
+      new Dirent({
+        d_next: new Dircookie(1n),
+        d_ino: new Inode(dir.children[0].id.id),
+        d_namlen: new Dirnamlen(10),
+        d_type: new Filetype(Filetype.regular_file),
+      }),
+    );
+    assertEquals(
+      decoder.decode(new Uint8Array(memory.buffer, 224, 10)),
+      "test_file1",
+    );
+
+    assertEquals(
+      fd_readdir(
+        fd.value,
+        toPointer(200),
+        toValue(100),
+        toBigValue(0n),
+        toPointer(0),
+      ),
+      Errno.success,
+    );
+    assertEquals(
+      Size.cast(memory, toPointer(0)),
+      new Size(Dirent.size + 10),
+    );
+    assertEquals(
+      Dirent.cast(memory, toPointer(200), 0),
+      new Dirent({
+        d_next: new Dircookie(1n),
+        d_ino: new Inode(dir.children[0].id.id),
+        d_namlen: new Dirnamlen(10),
+        d_type: new Filetype(Filetype.regular_file),
+      }),
+    );
+    assertEquals(
+      decoder.decode(new Uint8Array(memory.buffer, 224, 10)),
+      "test_file1",
+    );
+
+    assertEquals(
+      fd_readdir(
+        fd.value,
+        toPointer(200),
+        toValue(100),
+        toBigValue(1n),
+        toPointer(0),
+      ),
+      Errno.success,
+    );
+    assertEquals(
+      Size.cast(memory, toPointer(0)),
+      new Size(Dirent.size + 10),
+    );
+    assertEquals(
+      Dirent.cast(memory, toPointer(200), 0),
+      new Dirent({
+        d_next: new Dircookie(2n),
+        d_ino: new Inode(dir.children[1].id.id),
+        d_namlen: new Dirnamlen(10),
+        d_type: new Filetype(Filetype.regular_file),
+      }),
+    );
+    assertEquals(
+      decoder.decode(new Uint8Array(memory.buffer, 224, 10)),
+      "test_file2",
+    );
+
+    assertEquals(
+      fd_readdir(
+        fd.value,
+        toPointer(200),
+        toValue(100),
+        toBigValue(2n),
+        toPointer(0),
+      ),
+      Errno.success,
+    );
+    assertEquals(
+      Size.cast(memory, toPointer(0)),
+      new Size(Dirent.size + 10),
+    );
+    assertEquals(
+      Dirent.cast(memory, toPointer(200), 0),
+      new Dirent({
+        d_next: new Dircookie(3n),
+        d_ino: new Inode(dir.children[2].id.id),
+        d_namlen: new Dirnamlen(10),
+        d_type: new Filetype(Filetype.regular_file),
+      }),
+    );
+    assertEquals(
+      decoder.decode(new Uint8Array(memory.buffer, 224, 10)),
+      "test_file3",
+    );
+
+    assertEquals(
+      fd_readdir(
+        fd.value,
+        toPointer(200),
+        toValue(100),
+        toBigValue(3n),
+        toPointer(0),
+      ),
+      Errno.success,
+    );
+    assertEquals(
+      Size.cast(memory, toPointer(0)),
+      new Size(0),
+    );
+  });
+});
+
+Deno.test("fd_close", () => {
+  const fd = FS.open(
+    new FS.File({
+      name: new FS.FileName("test_file"),
+      type: FS.File.type.regularFile,
+    }),
+  );
+
+  assertEquals(
+    fd_close(fd.value),
+    Errno.success,
+  );
+
+  assertEquals(
+    FS.findByFd(fd),
+    undefined,
+  );
 });

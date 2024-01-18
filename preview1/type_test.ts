@@ -6,6 +6,8 @@ import {
   Data,
   Device,
   Dircookie,
+  Dirent,
+  Dirnamlen,
   Errno,
   Event,
   EventFdReadwrite,
@@ -1146,6 +1148,13 @@ Deno.test("fd", async (t) => {
       new Uint8Array([1, 0, 0, 0]),
     );
   });
+
+  await t.step("provide()", () => {
+    assertEquals(
+      !!Fd.provide(),
+      true,
+    );
+  });
 });
 
 Deno.test("subscription_fd_readwrite", async (t) => {
@@ -1398,7 +1407,7 @@ Deno.test("errno", async (t) => {
 Deno.test("dircookie", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Dircookie);
     const offset = 8;
 
     const data = new DataView(memory.buffer);
@@ -1412,7 +1421,7 @@ Deno.test("dircookie", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Dircookie);
     const offset = 8;
 
     const cookie = new Dircookie(toBigValue(100n));
@@ -1421,6 +1430,23 @@ Deno.test("dircookie", async (t) => {
     assertEquals(
       new Uint8Array(memory.buffer, addOffset(pointer, offset), Dircookie.size),
       new Uint8Array([100, 0, 0, 0, 0, 0, 0, 0]),
+    );
+  });
+
+  await t.step("next()", () => {
+    const cookie = new Dircookie(toBigValue(64n));
+
+    assertEquals(
+      cookie.next(),
+      new Dircookie(65n),
+    );
+  });
+
+  await t.step("number", () => {
+    const cookie = new Dircookie(toBigValue(128n));
+    assertEquals(
+      cookie.number,
+      128,
     );
   });
 });
@@ -1649,7 +1675,7 @@ Deno.test("filestat", async (t) => {
 Deno.test("oflags", async (t) => {
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Oflags);
     const offset = 8;
 
     const data = new DataView(memory.buffer);
@@ -1664,7 +1690,7 @@ Deno.test("oflags", async (t) => {
 
   await t.step("store()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
-    const pointer = randomPointer(Errno);
+    const pointer = randomPointer(Oflags);
     const offset = 8;
 
     const flags = new Oflags(Oflags.directory);
@@ -1698,5 +1724,88 @@ Deno.test("oflags", async (t) => {
     const flags = new Oflags(Oflags.trunc);
 
     assertEquals(flags.trunc, true);
+  });
+});
+
+Deno.test("dirnamlen", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Dirnamlen);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setUint32(addOffset(pointer, offset), 24, true);
+    data.setUint32(addOffset(pointer, offset + 16), 1, true);
+
+    assertEquals(
+      Dirnamlen.cast(memory, toPointer(pointer), offset),
+      new Dirnamlen(toValue(24)),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Dirnamlen);
+    const offset = 8;
+
+    const dirnamlen = new Dirnamlen(24 as Value<Dirnamlen>);
+    dirnamlen.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), Dirnamlen.size),
+      new Uint8Array([24, 0, 0, 0]),
+    );
+  });
+});
+
+Deno.test("dirent", async (t) => {
+  await t.step("cast()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Dirent);
+    const offset = 8;
+
+    const data = new DataView(memory.buffer);
+    data.setBigUint64(addOffset(pointer, offset), 24n, true);
+    data.setBigUint64(addOffset(pointer, offset + 8), 128n, true);
+    data.setUint32(addOffset(pointer, offset + 16), 16, true);
+    data.setUint8(addOffset(pointer, offset + 20), 4);
+
+    assertEquals(
+      Dirent.cast(memory, toPointer(pointer), offset),
+      new Dirent({
+        d_next: new Dircookie(toBigValue(24n)),
+        d_ino: new Inode(toBigValue(128n)),
+        d_namlen: new Dirnamlen(toValue(16)),
+        d_type: new Filetype(Filetype.regular_file),
+      }),
+    );
+  });
+
+  await t.step("store()", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Dirent);
+    const offset = 8;
+
+    const dirent = new Dirent({
+      d_next: new Dircookie(toBigValue(24n)),
+      d_ino: new Inode(toBigValue(128n)),
+      d_namlen: new Dirnamlen(toValue(16)),
+      d_type: new Filetype(Filetype.regular_file),
+    });
+    dirent.store(memory, toPointer(pointer), offset);
+
+    assertEquals(
+      new Uint8Array(memory.buffer, addOffset(pointer, offset), Dirent.size),
+      new Uint8Array([
+        /// d_next
+        ...[24, 0, 0, 0, 0, 0, 0, 0],
+        //d_ino
+        ...[128, 0, 0, 0, 0, 0, 0, 0],
+        //d_namlen
+        ...[16, 0, 0, 0],
+        //d_type
+        ...[4, 0, 0, 0],
+      ]),
+    );
   });
 });

@@ -1,5 +1,7 @@
 import * as WASI from "./type.ts";
 
+const encoder = new TextEncoder();
+
 interface FS<T extends string> {
   __fs: T;
 }
@@ -109,10 +111,40 @@ const genFileId = (function* (): Iterator<FileId> {
   }
 })();
 
+// File Name
+export class FileName implements FS<"file_name"> {
+  readonly __fs = "file_name";
+
+  readonly str: Value<string, FileName>;
+
+  constructor(
+    str: Value<string, FileName> | string,
+  ) {
+    this.str = str as Value<string, FileName>;
+  }
+
+  static zero(): FileName {
+    return new FileName("");
+  }
+
+  wasi_dirnamlen(): WASI.Dirnamlen {
+    return new WASI.Dirnamlen(
+      this.blob.length as WASI.Value<WASI.Dirnamlen>,
+    );
+  }
+
+  get blob(): Uint8Array {
+    return encoder.encode(this.str);
+  }
+}
+
 type FileParams = {
-  name: string;
-  type: FileType;
-  timestamp?: Timestamp;
+  readonly name: FileName;
+  readonly type: FileType;
+  readonly timestamp?: Timestamp;
+  readonly wasi_fs_flags?: WASI.Fdflags;
+  readonly wasi_fs_rights_base?: WASI.Rights;
+  readonly wasi_fs_rights_inheriting?: WASI.Rights;
 };
 
 export class File implements FS<"file"> {
@@ -124,7 +156,7 @@ export class File implements FS<"file"> {
   })();
 
   // File Name
-  readonly name: string;
+  readonly name: FileName;
 
   // File Type
   readonly type: FileType;
@@ -137,21 +169,38 @@ export class File implements FS<"file"> {
     });
 
   get fullName(): string {
-    return (this.parent ? `${this.parent.fullName}${this.name}` : this.name) +
+    return (this.parent
+      ? `${this.parent.fullName}${this.name.str}`
+      : this.name.str) +
       (this.type.dir ? "/" : "");
   }
 
   // Create Timestamp
   private readonly _timestamp: Timestamp;
 
+  // WASI Data Type
+  private _wasi_fs_flags: WASI.Fdflags;
+  private readonly _wasi_fs_rights_base: WASI.Rights;
+  private readonly _wasi_fs_rights_inheritiong: WASI.Rights;
+
+  set wasi_fs_flags(flags: WASI.Fdflags) {
+    this._wasi_fs_flags = flags;
+  }
+
   constructor({
     name,
     type,
     timestamp = Timestamp.now(),
+    wasi_fs_flags = WASI.Fdflags.zero(),
+    wasi_fs_rights_base = WASI.Rights.zero(),
+    wasi_fs_rights_inheriting = WASI.Rights.zero(),
   }: FileParams) {
     this.name = name;
     this.type = type;
     this._timestamp = timestamp;
+    this._wasi_fs_flags = wasi_fs_flags;
+    this._wasi_fs_rights_base = wasi_fs_rights_base;
+    this._wasi_fs_rights_inheritiong = wasi_fs_rights_inheriting;
   }
 
   // structure
@@ -202,7 +251,7 @@ export class File implements FS<"file"> {
         return this;
       default:
         return this._children.find(
-          (file) => file.name === path[0],
+          (file) => file.name.str === path[0],
         )?.find(
           path.slice(1),
         );
@@ -219,9 +268,9 @@ export class File implements FS<"file"> {
   wasi_fdstat(): WASI.Fdstat {
     return new WASI.Fdstat({
       fs_filetype: this.type.wasi_filetype(),
-      fs_flags: WASI.Fdflags.zero(), // TODO
-      fs_rights_base: WASI.Rights.zero(), // TODO
-      fs_rights_inheriting: WASI.Rights.zero(), // TODO
+      fs_flags: this._wasi_fs_flags,
+      fs_rights_base: this._wasi_fs_rights_base,
+      fs_rights_inheriting: this._wasi_fs_rights_inheritiong,
     });
   }
 
@@ -229,32 +278,79 @@ export class File implements FS<"file"> {
     return new WASI.Filestat({
       dev: deviceId.wasi_device(),
       ino: this.id.wasi_inode(),
-      filetype: this.type.wasi_filetype(), // TODO
+      filetype: this.type.wasi_filetype(),
       nlink: WASI.Linkcount.zero(), // TODO
-      size: WASI.Filesize.zero(),
+      size: WASI.Filesize.zero(), // TODO
       atim: this._timestamp.wasi_timestamp(),
       mtim: this._timestamp.wasi_timestamp(),
       ctim: this._timestamp.wasi_timestamp(),
     });
   }
+
+  wasi_dirent(next: WASI.Dircookie): WASI.Dirent {
+    return new WASI.Dirent({
+      d_next: next,
+      d_ino: this.id.wasi_inode(),
+      d_namlen: this.name.wasi_dirnamlen(),
+      d_type: this.type.wasi_filetype(),
+    });
+  }
 }
 
+const stdin = new File({
+  name: new FileName("stdin"),
+  type: new FileType(FileType.characterDevice),
+  wasi_fs_flags: new WASI.Fdflags(WASI.Fdflags.nonblock),
+});
+const stdout = new File({
+  name: new FileName("stdout"),
+  type: new FileType(FileType.characterDevice),
+  wasi_fs_flags: new WASI.Fdflags(WASI.Fdflags.nonblock),
+  wasi_fs_rights_base: new WASI.Rights(WASI.Rights.fd_write),
+  wasi_fs_rights_inheriting: new WASI.Rights(WASI.Rights.fd_write),
+});
+const stderr = new File({
+  name: new FileName("stderr"),
+  type: new FileType(FileType.characterDevice),
+  wasi_fs_flags: new WASI.Fdflags(WASI.Fdflags.nonblock),
+  wasi_fs_rights_base: new WASI.Rights(WASI.Rights.fd_write),
+  wasi_fs_rights_inheriting: new WASI.Rights(WASI.Rights.fd_write),
+});
+
 const root = (new File({
-  name: "",
+  name: FileName.zero(),
   type: new FileType(FileType.dir),
 })).append(
   (new File({
-    name: "dev",
+    name: new FileName("dev"),
     type: new FileType(FileType.dir),
-  })).append(
-    new File({ name: "stdin", type: new FileType(FileType.characterDevice) }),
-    new File({ name: "stdout", type: new FileType(FileType.characterDevice) }),
-    new File({ name: "stderr", type: new FileType(FileType.characterDevice) }),
-  ),
+  })).append(stdin, stdout, stderr),
 );
 
 let current = root;
 
 export const find = (path: string): File | undefined => {
   return current.find(path);
+};
+
+// TODO
+const openMap = new Map<WASI.Value<WASI.Fd>, File>([
+  [WASI.Fd.stdin, stdin],
+  [WASI.Fd.stdout, stdout],
+  [WASI.Fd.stderr, stderr],
+]);
+
+// File Open
+export const open = (file: File): WASI.Fd => {
+  const fd = WASI.Fd.provide();
+  openMap.set(fd.value, file);
+  return fd;
+};
+
+export const findByFd = (fd: WASI.Fd): File | undefined => {
+  return openMap.get(fd.value);
+};
+
+export const closeByFd = (fd: WASI.Fd) => {
+  openMap.delete(fd.value);
 };

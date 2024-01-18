@@ -4,7 +4,9 @@ import {
   Ciovec,
   CiovecArray,
   Clockid,
+  Data,
   Dircookie,
+  Dirent,
   Errno,
   Event,
   EventFdReadwrite,
@@ -14,7 +16,6 @@ import {
   Fdstat,
   Filesize,
   Filestat,
-  Filetype,
   IovecArray,
   Lookupflags,
   Oflags,
@@ -290,8 +291,9 @@ export function poll_oneoff(
 // fd_close(fd: fd) -> Result<(), errno>
 //
 // Close a file descriptor. Note: This is similar to close in POSIX.
-export function fd_close(_fd: Fd): Value<Errno> {
-  return Errno.nosys;
+export function fd_close(fd: Value<Fd>): Value<Errno> {
+  FS.closeByFd(new Fd(fd));
+  return Errno.success;
 }
 
 // fd_filestat_get(fd: fd) -> Result<filestat, errno>
@@ -345,30 +347,6 @@ export function fd_read(
   return Errno.nosys;
 }
 
-const fdstats = [
-  // stdin
-  new Fdstat({
-    fs_filetype: new Filetype(Filetype.character_device),
-    fs_flags: new Fdflags(Fdflags.nonblock),
-    fs_rights_base: Rights.zero(),
-    fs_rights_inheriting: Rights.zero(),
-  }),
-  // stdout
-  new Fdstat({
-    fs_filetype: new Filetype(Filetype.character_device),
-    fs_flags: new Fdflags(Fdflags.nonblock),
-    fs_rights_base: new Rights(Rights.fd_write),
-    fs_rights_inheriting: new Rights(Rights.fd_write),
-  }),
-  // stderr
-  new Fdstat({
-    fs_filetype: new Filetype(Filetype.character_device),
-    fs_flags: new Fdflags(Fdflags.nonblock),
-    fs_rights_base: new Rights(Rights.fd_write),
-    fs_rights_inheriting: new Rights(Rights.fd_write),
-  }),
-];
-
 // fd_fdstat_get(fd: fd) -> Result<fdstat, errno>
 //
 // Get the attributes of a file descriptor. Note: This returns similar flags
@@ -377,11 +355,12 @@ export function fd_fdstat_get(
   fd: Value<Fd>,
   result: Pointer<Fdstat>,
 ): Value<Errno> {
-  if (!fdstats[fd]) {
+  const file = FS.findByFd(new Fd(fd));
+  if (!file) {
     return Errno.badf;
   }
 
-  fdstats[fd].store(memory, result);
+  file.wasi_fdstat().store(memory, result);
   return Errno.success;
 }
 
@@ -394,14 +373,12 @@ export function fd_fdstat_set_flags(
   // The desired values of the file descriptor flags.
   flags: Value<Fdflags>,
 ): Value<Errno> {
-  if (!fdstats[fd]) {
+  const file = FS.findByFd(new Fd(fd));
+  if (!file) {
     return Errno.badf;
   }
 
-  fdstats[fd] = new Fdstat({
-    ...fdstats[fd],
-    fs_flags: new Fdflags(flags),
-  });
+  file.wasi_fs_flags = new Fdflags(flags);
   return Errno.success;
 }
 
@@ -438,14 +415,40 @@ export function fd_prestat_dir_name(
 // allows the caller to grow its read buffer size in case it's too small to fit
 // a single large directory entry, or skip the oversized directory entry.
 export function fd_readdir(
-  _fd: Value<Fd>,
+  fd: Value<Fd>,
   // The buffer where directory entries are stored
-  _buf: Pointer<U8<string>>,
-  _buf_len: Value<Size>,
+  buf: Pointer<U8<string>>,
+  buf_len: Value<Size>,
   // The location within the directory to start reading
-  _cookie: BigValue<Dircookie>,
+  cookie: BigValue<Dircookie>,
+  // The number of bytes stored in the read buffer. If less than the size of the
+  // read buffer, the end of the directory has been reached.
+  result: Pointer<Size>,
 ): Value<Errno> {
-  return Errno.notsup;
+  const dir = FS.findByFd(new Fd(fd));
+  if (!dir) {
+    return Errno.badf;
+  }
+
+  const offset = new Dircookie(cookie);
+  const children = dir.children.slice(offset.number);
+  if (!children.length) {
+    new Size(0).store(memory, result);
+    return Errno.success;
+  }
+
+  const child = children[0];
+  child.wasi_dirent(offset.next()).store(
+    memory,
+    buf as Pointer<Data<string>> as Pointer<Dirent>,
+  );
+
+  const { written } = encoder.encodeInto(
+    child.name.str,
+    new Uint8Array(memory.buffer, buf + Dirent.size, buf_len - Dirent.size),
+  );
+  new Size(Dirent.size + written).store(memory, result);
+  return Errno.success;
 }
 
 // Return the attributes of a file or directory. Note: This is similar to `stat`
@@ -466,7 +469,7 @@ export function path_filestat_get(
 
   const file = FS.find(path);
   if (!file) {
-    return Errno.notsup;
+    return Errno.noent;
   }
 
   file.wasi_filestat().store(memory, result);
@@ -499,14 +502,19 @@ export function path_open(
   _fs_rights_inheriting: BigValue<Rights>,
   _fdflags: Value<Fdflags>,
   // The file descriptor of the file that has been opened.
-  _result: Pointer<Fd>,
+  result: Pointer<Fd>,
 ): Value<Errno> {
   const path = decoder.decode(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
-  console.debug(path);
 
-  return Errno.notsup;
+  const file = FS.find(path);
+  if (!file) {
+    return Errno.noent;
+  }
+
+  FS.open(file).store(memory, result);
+  return Errno.success;
 }
 
 export const Module = {

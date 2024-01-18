@@ -1,4 +1,4 @@
-type Memory = WebAssembly.Memory;
+type Memory = WebAssembly.Memory | Uint8Array;
 
 export interface Data<T extends string> {
   readonly __data: T;
@@ -51,9 +51,13 @@ export abstract class U8<T extends string> implements Data<T> {
   static readonly size = 1;
   static readonly alignment = 1;
 
+  readonly value: Value<U8<T>>;
+
   constructor(
-    readonly value: Value<U8<T>>,
-  ) {}
+    value: Value<U8<T>> | number,
+  ) {
+    this.value = value as Value<U8<T>>;
+  }
 
   store(mem: Memory, ptr: Pointer<U8<T>>, offset: Offset = 0) {
     const data = new DataView(mem.buffer, addOffset(ptr, offset), U8.size);
@@ -77,9 +81,13 @@ abstract class U16<T extends string> implements Data<T> {
   static readonly size = 2;
   static readonly alignment = 2;
 
+  readonly value: Value<U16<T>>;
+
   constructor(
-    readonly value: Value<U16<T>>,
-  ) {}
+    value: Value<U16<T>> | number,
+  ) {
+    this.value = value as Value<U16<T>>;
+  }
 
   store(mem: Memory, ptr: Pointer<U16<T>>, offset: Offset = 0) {
     const data = new DataView(mem.buffer, addOffset(ptr, offset), U16.size);
@@ -103,9 +111,13 @@ abstract class U32<T extends string> implements Data<T> {
   static readonly size = 4;
   static readonly alignment = 4;
 
+  readonly value: Value<U32<T>>;
+
   constructor(
-    readonly value: Value<U32<T>>,
-  ) {}
+    value: Value<U32<T>> | number,
+  ) {
+    this.value = value as Value<U32<T>>;
+  }
 
   store(mem: Memory, ptr: Pointer<U32<T>>, offset: Offset = 0) {
     const data = new DataView(mem.buffer, addOffset(ptr, offset), U32.size);
@@ -129,9 +141,13 @@ abstract class U64<T extends string> implements Data<T> {
   static readonly size = 8;
   static readonly alignment = 8;
 
+  readonly value: BigValue<U64<T>>;
+
   constructor(
-    readonly value: BigValue<U64<T>>,
-  ) {}
+    value: BigValue<U64<T>> | bigint,
+  ) {
+    this.value = value as BigValue<U64<T>>;
+  }
 
   store(mem: Memory, ptr: Pointer<U64<T>>, offset: Offset = 0) {
     const data = new DataView(mem.buffer, addOffset(ptr, offset), U64.size);
@@ -779,35 +795,37 @@ export class Rights implements Data<"rights"> {
 }
 
 // A file descriptor handle.
-export class Fd implements Data<"fd"> {
+export class Fd extends U32<"fd"> {
   readonly __data = "fd";
-
-  static readonly size = 4;
-  static readonly alignment = 4;
-
-  constructor(
-    readonly value: Value<Fd>,
-  ) {}
 
   static cast(
     mem: Memory,
     ptr: Pointer<Fd>,
     offset: Offset = 0,
   ): Fd {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fd.size);
     return new Fd(
-      data.getUint32(0, true) as Value<Fd>,
+      this.getValue(mem, ptr, offset) as Value<Fd>,
     );
-  }
-
-  store(mem: Memory, ptr: Pointer<Fd>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Fd.size);
-    data.setUint32(0, this.value, true);
   }
 
   static readonly stdin = 0 as Value<Fd>;
   static readonly stdout = 1 as Value<Fd>;
   static readonly stderr = 2 as Value<Fd>;
+
+  // Provide Fd.
+  // See: path_open()
+  private static readonly provided = new Set([Fd.stdin, Fd.stdout, Fd.stderr]);
+
+  static provide(): Fd {
+    while (true) {
+      const fd = Math.floor(Math.random() * (1 << 31)) as Value<Fd>;
+      if (Fd.provided.has(fd)) {
+        continue;
+      }
+      Fd.provided.add(fd);
+      return new Fd(fd);
+    }
+  }
 }
 
 interface IovecParams {
@@ -942,6 +960,31 @@ export class Dircookie extends U64<"dircookie"> {
       Dircookie.getValue(mem, ptr, offset) as BigValue<Dircookie>,
     );
   }
+
+  // biting to number
+  get number(): number {
+    return Number(this.value);
+  }
+
+  // Next Offset
+  next(): Dircookie {
+    return new Dircookie(
+      this.value + 1n as BigValue<Dircookie>,
+    );
+  }
+}
+
+// The type of the file referred to by this directory entry.
+export class Dirnamlen extends U32<"dirnamlen"> {
+  readonly __data = "dirnamlen";
+
+  static cast(
+    mem: Memory,
+    ptr: Pointer<Dirnamlen>,
+    offset: Offset = 0,
+  ): Dirnamlen {
+    return new Dirnamlen(this.getValue(mem, ptr, offset) as Value<Dirnamlen>);
+  }
 }
 
 // File serial number that is unique within its file system.
@@ -1027,6 +1070,86 @@ export class Filetype extends U8<"filetype"> {
 
   get symbolic_link(): boolean {
     return this.value === Filetype.symbolic_link;
+  }
+}
+
+// A directory entry.
+export class Dirent implements Data<"dirent"> {
+  readonly __data = "dirent";
+
+  static readonly size = 24;
+  static readonly alignment = 8;
+
+  // The offset of the next directory entry stored in this directory.
+  readonly d_next: Dircookie;
+
+  // The serial number of the file referred to by this directory entry.
+  readonly d_ino: Inode;
+
+  // The length of the name of the directory entry.
+  readonly d_namlen: Dirnamlen;
+
+  // The type of the file referred to by this directory entry.
+  readonly d_type: Filetype;
+
+  constructor({
+    d_next,
+    d_ino,
+    d_namlen,
+    d_type,
+  }: Pick<Dirent, "d_next" | "d_ino" | "d_namlen" | "d_type">) {
+    this.d_next = d_next;
+    this.d_ino = d_ino;
+    this.d_namlen = d_namlen;
+    this.d_type = d_type;
+  }
+
+  static cast(mem: Memory, ptr: Pointer<Dirent>, offset: Offset = 0): Dirent {
+    return new Dirent({
+      d_next: Dircookie.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Dircookie>,
+        offset,
+      ),
+      d_ino: Inode.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Inode>,
+        offset + 8,
+      ),
+      d_namlen: Dirnamlen.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Dirnamlen>,
+        offset + 16,
+      ),
+      d_type: Filetype.cast(
+        mem,
+        ptr as Pointer<Data<string>> as Pointer<Filetype>,
+        offset + 20,
+      ),
+    });
+  }
+
+  store(mem: Memory, ptr: Pointer<Dirent>, offset: Offset = 0) {
+    this.d_next.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Dircookie>,
+      offset,
+    );
+    this.d_ino.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Inode>,
+      offset + 8,
+    );
+    this.d_namlen.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Dirnamlen>,
+      offset + 16,
+    );
+    this.d_type.store(
+      mem,
+      ptr as Pointer<Data<string>> as Pointer<Filetype>,
+      offset + 20,
+    );
   }
 }
 
@@ -1215,84 +1338,37 @@ export class Lookupflags extends U32<"lookupflags"> {
 }
 
 // Exit code generated by a process when exiting.
-export class Exitcode implements Data<"exitcode"> {
+export class Exitcode extends U32<"exitcode"> {
   readonly __data = "exitcode";
-
-  static readonly size = 4;
-  static readonly alignment = 4;
-
-  constructor(
-    readonly value: Value<Exitcode>,
-  ) {}
 }
 
 // userdata: u64
 //
 // User-provided value that may be attached to objects that is retained when extracted from the implementation.
-export class Userdata implements Data<"userdata"> {
+export class Userdata extends U64<"userdata"> {
   readonly __data = "userdata";
-
-  static readonly size = 8;
-  static readonly alignment = 8;
-
-  constructor(
-    readonly value: BigValue<Userdata>,
-  ) {}
 
   static cast(
     mem: Memory,
     ptr: Pointer<Userdata>,
     offset: Offset = 0,
   ): Userdata {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Userdata.size,
-    );
-    return new Userdata(data.getBigUint64(0, true) as BigValue<Userdata>);
-  }
-
-  store(mem: Memory, ptr: Pointer<Userdata>, offset: Offset = 0) {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Userdata.size,
-    );
-    data.setBigUint64(0, this.value, true);
+    return new Userdata(this.getValue(mem, ptr, offset) as BigValue<Userdata>);
   }
 }
 
 // eventtype: Variant
 //
 // Type of a subscription to an event or its occurrence.
-export class Eventtype implements Data<"eventtype"> {
+export class Eventtype extends U8<"eventtype"> {
   readonly __data = "eventtype";
-
-  static readonly size = 1;
-  static readonly alignment = 1;
-
-  constructor(readonly value: Value<Eventtype>) {}
 
   static cast(
     mem: Memory,
     ptr: Pointer<Eventtype>,
     offset: Offset = 0,
   ): Eventtype {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Eventtype.size,
-    );
-    return new Eventtype(data.getUint8(0) as Value<Eventtype>);
-  }
-
-  store(mem: Memory, ptr: Pointer<Eventtype>, offset: Offset = 0) {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Eventtype.size,
-    );
-    data.setUint8(0, this.value);
+    return new Eventtype(this.getValue(mem, ptr, offset) as Value<Eventtype>);
   }
 
   // The time value of clock subscription_clock::id has reached timestamp

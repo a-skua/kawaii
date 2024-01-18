@@ -1,10 +1,14 @@
 import { assertEquals } from "assert";
 import {
+  closeByFd,
   DeviceId,
   File,
   FileId,
+  FileName,
   FileType,
   find,
+  findByFd,
+  open,
   Timestamp,
   Value,
 } from "./fs.ts";
@@ -105,6 +109,26 @@ Deno.test("FileType", async (t) => {
   });
 });
 
+Deno.test("FileName", async (t) => {
+  await t.step("zero()", () => {
+    assertEquals(
+      FileName.zero(),
+      new FileName(""),
+    );
+  });
+
+  await t.step("wasi_dirnamlen()", async (t) => {
+    await t.step("世界", () => {
+      const name = new FileName("世界");
+
+      assertEquals(
+        name.wasi_dirnamlen(),
+        new WASI.Dirnamlen(6),
+      );
+    });
+  });
+});
+
 Deno.test("File", async (t) => {
   await t.step("fullName", () => {
     assertEquals(
@@ -138,14 +162,14 @@ Deno.test("File", async (t) => {
 
   await t.step("append()", () => {
     const file1 = new File({
-      name: "file",
+      name: new FileName("file"),
       type: File.type.regularFile,
     });
     const file2 = new File(file1);
     const file3 = new File(file1);
 
     const dir = new File({
-      name: "dir",
+      name: new FileName("dir"),
       type: File.type.dir,
     });
 
@@ -161,19 +185,19 @@ Deno.test("File", async (t) => {
 
   await t.step("tree()", () => {
     const file = (new File({
-      name: "tree_test_dir",
+      name: new FileName("tree_test_dir"),
       type: File.type.dir,
     })).append(
       new File({
-        name: "tree_test_file",
+        name: new FileName("tree_test_file"),
         type: File.type.regularFile,
       }),
       (new File({
-        name: "tree_test_dir",
+        name: new FileName("tree_test_dir"),
         type: File.type.dir,
       })).append(
         new File({
-          name: "tree_test_file",
+          name: new FileName("tree_test_file"),
           type: File.type.regularFile,
         }),
       ),
@@ -188,22 +212,22 @@ Deno.test("File", async (t) => {
 
   await t.step("find()", async (t) => {
     const childFile1 = new File({
-      name: "find_test_file1",
+      name: new FileName("find_test_file1"),
       type: File.type.regularFile,
     });
 
     const childFile2 = new File({
-      name: "find_test_file2",
+      name: new FileName("find_test_file2"),
       type: File.type.regularFile,
     });
 
     const file = (new File({
-      name: "find_test_dir1",
+      name: new FileName("find_test_dir1"),
       type: File.type.dir,
     })).append(
       childFile1,
       (new File({
-        name: "find_test_dir2",
+        name: new FileName("find_test_dir2"),
         type: File.type.dir,
       })).append(
         childFile2,
@@ -241,7 +265,7 @@ Deno.test("File", async (t) => {
 
   await t.step("wasi_fdstat()", () => {
     const file = new File({
-      name: "file",
+      name: new FileName("file"),
       type: File.type.dir,
     });
 
@@ -255,9 +279,48 @@ Deno.test("File", async (t) => {
       }),
     );
   });
+
+  await t.step("wasi_filestat()", () => {
+    const file = new File({
+      name: new FileName("file"),
+      type: new FileType(FileType.regularFile),
+    });
+    const timestamp = Timestamp.now();
+
+    assertEquals(
+      file.wasi_filestat(),
+      new WASI.Filestat({
+        dev: new WASI.Device(0n),
+        ino: new WASI.Inode(file.id.id),
+        filetype: new WASI.Filetype(WASI.Filetype.regular_file),
+        nlink: new WASI.Linkcount(0n),
+        size: new WASI.Filesize(0n),
+        atim: timestamp.wasi_timestamp(),
+        mtim: timestamp.wasi_timestamp(),
+        ctim: timestamp.wasi_timestamp(),
+      }),
+    );
+  });
+
+  await t.step("wasi_dirent()", () => {
+    const file = new File({
+      name: new FileName("file"),
+      type: new FileType(FileType.regularFile),
+    });
+
+    assertEquals(
+      file.wasi_dirent(new WASI.Dircookie(1n)),
+      new WASI.Dirent({
+        d_next: new WASI.Dircookie(1n),
+        d_ino: new WASI.Inode(file.id.id),
+        d_namlen: new WASI.Dirnamlen(4),
+        d_type: new WASI.Filetype(WASI.Filetype.regular_file),
+      }),
+    );
+  });
 });
 
-Deno.test("find", async (t) => {
+Deno.test("find()", async (t) => {
   await t.step("/", () => {
     assertEquals(find("/"), File.root);
   });
@@ -271,4 +334,40 @@ Deno.test("find", async (t) => {
 
     assertEquals(find("../"), undefined);
   });
+});
+
+Deno.test("findByFd()", async (t) => {
+  await t.step("stdout", () => {
+    assertEquals(
+      !!findByFd(new WASI.Fd(WASI.Fd.stdout)),
+      true,
+    );
+  });
+
+  await t.step("undefined fd", () => {
+    assertEquals(
+      !!findByFd(WASI.Fd.provide()),
+      false,
+    );
+  });
+});
+
+Deno.test("close()", async (t) => {
+  const file = new File({
+    name: new FileName("test_file"),
+    type: File.type.regularFile,
+  });
+  const fd = open(file);
+
+  assertEquals(
+    findByFd(fd),
+    file,
+  );
+
+  closeByFd(fd);
+
+  assertEquals(
+    findByFd(fd),
+    undefined,
+  );
 });
