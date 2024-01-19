@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "example": "deno run --allow-env --allow-read example/run.ts example.wasm",
+    "example": "deno run --allow-env --allow-read example/run.ts",
     "test": "deno test --coverage=coverage; deno coverage --lcov --output=coverage.lcov coverage; genhtml -o coverage/html coverage.lcov",
     "coverage": "deno task test; python3 -m http.server -d coverage/html"
   },

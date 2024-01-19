@@ -17,8 +17,11 @@ concisely.
 
 ### e.g.
 
-```js
-import runtime from "./kawaii.js";
+```sh
+# initialize
+cd example
+make
 
-runtime("example.wasm -h", import.meta.url);
+# run
+deno task example walkdir.wasm .
 ```
