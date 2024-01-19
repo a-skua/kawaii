@@ -128,9 +128,7 @@ export class FileName implements FS<"file_name"> {
   }
 
   wasi_dirnamlen(): WASI.Dirnamlen {
-    return new WASI.Dirnamlen(
-      this.blob.length as WASI.Value<WASI.Dirnamlen>,
-    );
+    return new WASI.Dirnamlen(this.blob.length);
   }
 
   get blob(): Uint8Array {
@@ -201,6 +199,18 @@ export class File implements FS<"file"> {
     this._wasi_fs_flags = wasi_fs_flags;
     this._wasi_fs_rights_base = wasi_fs_rights_base;
     this._wasi_fs_rights_inheritiong = wasi_fs_rights_inheriting;
+  }
+
+  static async fetch(name: FileName, url: string): Promise<File> {
+    const res = await fetch(new URL(url, import.meta.url));
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url}`);
+    }
+
+    return new File({
+      name: name,
+      type: File.type.regularFile,
+    });
   }
 
   // structure
@@ -317,14 +327,21 @@ const stderr = new File({
   wasi_fs_rights_inheriting: new WASI.Rights(WASI.Rights.fd_write),
 });
 
-const root = (new File({
+const root = new File({
   name: FileName.zero(),
   type: new FileType(FileType.dir),
-})).append(
-  (new File({
+}).append(
+  new File({
     name: new FileName("dev"),
     type: new FileType(FileType.dir),
-  })).append(stdin, stdout, stderr),
+  }).append(stdin, stdout, stderr),
+  new File({
+    name: new FileName("etc"),
+    type: new FileType(FileType.dir),
+  }).append(
+    await File.fetch(new FileName("hosts"), "/etc/hosts"),
+    await File.fetch(new FileName("resolv.conf"), "/etc/resolv.conf"),
+  ),
 );
 
 let current = root;
@@ -334,7 +351,7 @@ export const find = (path: string): File | undefined => {
 };
 
 // TODO
-const openMap = new Map<WASI.Value<WASI.Fd>, File>([
+const openMap = new Map<WASI.Value<number, WASI.Fd>, File>([
   [WASI.Fd.stdin, stdin],
   [WASI.Fd.stdout, stdout],
   [WASI.Fd.stderr, stderr],

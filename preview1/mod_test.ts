@@ -52,23 +52,23 @@ import init, {
 
 const decoder = new TextDecoder();
 
-const toPointer = <T extends Data<string>>(p: number): Pointer<T> =>
-  p as Pointer<T>;
-
 const toBigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
   v as BigValue<T>;
 
-const toValue = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
+const toValue = <T extends Data<string>>(v: number): Value<number, T> =>
+  v as Value<number, T>;
 
 interface DataType {
   alignment: number;
 }
 
+const toPointer = toValue;
+
 const randomPointer = <T extends Data<string>>(
   { alignment }: DataType,
 ): Pointer<T> => {
   const random = Math.floor(Math.random() * (1024 / alignment));
-  return toPointer(random * alignment);
+  return new Pointer(random * alignment);
 };
 
 Deno.test(Arg.name, () => {
@@ -162,8 +162,8 @@ Deno.test("clock_time_get", async (t) => {
       Errno.success,
     );
     assertEquals(
-      data.getBigUint64(pointer, true),
-      BigInt(performance.now()) * 1_000_000n,
+      data.getBigUint64(pointer, true) / 1_000_000n,
+      BigInt(Math.floor(performance.now())),
     );
   });
 
@@ -333,7 +333,7 @@ Deno.test("poll_oneoff", async (t) => {
 
     const ins = 100;
     for (let i = 0; i < subscriptions.length; i += 1) {
-      subscriptions[i].store(memory, toPointer(ins), Subscription.size * i);
+      subscriptions[i].store(memory, new Pointer(ins), Subscription.size * i);
     }
     const out = 200;
     const events = [
@@ -363,12 +363,12 @@ Deno.test("poll_oneoff", async (t) => {
       Errno.success,
     );
     assertEquals(
-      Size.cast(memory, toPointer(result)),
+      Size.cast(memory, new Pointer(result)),
       new Size(toValue(events.length)),
     );
     for (let i = 0; i < events.length; i += 1) {
       assertEquals(
-        Event.cast(memory, toPointer(out), Event.size * i),
+        Event.cast(memory, new Pointer(out), Event.size * i),
         events[i],
       );
     }
@@ -381,7 +381,10 @@ Deno.test("fd_fdstat_get", async (t) => {
     init({ memory });
 
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
-    assertEquals(fd_fdstat_get(Fd.stdin, pointer), Errno.success);
+    assertEquals(
+      fd_fdstat_get(Fd.stdin, toPointer(pointer.value)),
+      Errno.success,
+    );
     assertEquals(
       Fdstat.cast(memory, pointer),
       new Fdstat({
@@ -399,7 +402,7 @@ Deno.test("fd_fdstat_get", async (t) => {
 
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
-      fd_fdstat_get(Fd.stdout, pointer),
+      fd_fdstat_get(Fd.stdout, toPointer(pointer.value)),
       Errno.success,
     );
     assertEquals(
@@ -419,7 +422,7 @@ Deno.test("fd_fdstat_get", async (t) => {
 
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
-      fd_fdstat_get(Fd.stderr, pointer),
+      fd_fdstat_get(Fd.stderr, toPointer(pointer.value)),
       Errno.success,
     );
     assertEquals(
@@ -435,7 +438,10 @@ Deno.test("fd_fdstat_get", async (t) => {
 
   await t.step("undefined", () => {
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
-    assertEquals(fd_fdstat_get(toValue(3), pointer), Errno.badf);
+    assertEquals(
+      fd_fdstat_get(toValue(3), toPointer(pointer.value)),
+      Errno.badf,
+    );
   });
 });
 
@@ -493,7 +499,7 @@ Deno.test("fd_readdir", async (t) => {
     assertEquals(
       fd_readdir(
         toValue(4),
-        toPointer(pointer),
+        toPointer(pointer.value),
         toValue(100),
         toBigValue(0n),
         toPointer(0),
@@ -538,11 +544,11 @@ Deno.test("fd_readdir", async (t) => {
     );
 
     assertEquals(
-      Size.cast(memory, toPointer(0)),
+      Size.cast(memory, new Pointer(0)),
       new Size(Dirent.size + 10),
     );
     assertEquals(
-      Dirent.cast(memory, toPointer(200), 0),
+      Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(1n),
         d_ino: new Inode(dir.children[0].id.id),
@@ -566,11 +572,11 @@ Deno.test("fd_readdir", async (t) => {
       Errno.success,
     );
     assertEquals(
-      Size.cast(memory, toPointer(0)),
+      Size.cast(memory, new Pointer(0)),
       new Size(Dirent.size + 10),
     );
     assertEquals(
-      Dirent.cast(memory, toPointer(200), 0),
+      Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(1n),
         d_ino: new Inode(dir.children[0].id.id),
@@ -594,11 +600,11 @@ Deno.test("fd_readdir", async (t) => {
       Errno.success,
     );
     assertEquals(
-      Size.cast(memory, toPointer(0)),
+      Size.cast(memory, new Pointer(0)),
       new Size(Dirent.size + 10),
     );
     assertEquals(
-      Dirent.cast(memory, toPointer(200), 0),
+      Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(2n),
         d_ino: new Inode(dir.children[1].id.id),
@@ -622,11 +628,11 @@ Deno.test("fd_readdir", async (t) => {
       Errno.success,
     );
     assertEquals(
-      Size.cast(memory, toPointer(0)),
+      Size.cast(memory, new Pointer(0)),
       new Size(Dirent.size + 10),
     );
     assertEquals(
-      Dirent.cast(memory, toPointer(200), 0),
+      Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(3n),
         d_ino: new Inode(dir.children[2].id.id),
@@ -650,7 +656,7 @@ Deno.test("fd_readdir", async (t) => {
       Errno.success,
     );
     assertEquals(
-      Size.cast(memory, toPointer(0)),
+      Size.cast(memory, new Pointer(0)),
       new Size(0),
     );
   });

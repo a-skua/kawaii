@@ -40,10 +40,10 @@ import {
   Value,
 } from "./type.ts";
 
-const toPointer = <T extends Data<string>>(p: number): Pointer<T> =>
-  p as Pointer<T>;
+const toPointer = <T extends Data<string>>(p: Pointer<T>): Pointer<T> => p;
 
-const toValue = <T extends Data<string>>(v: number): Value<T> => v as Value<T>;
+const toValue = <T extends Data<string>>(v: number): Value<number, T> =>
+  v as Value<number, T>;
 
 const toBigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
   v as BigValue<T>;
@@ -56,13 +56,17 @@ const randomPointer = <T extends Data<string>>(
   { alignment }: DataType,
 ): Pointer<T> => {
   const random = Math.floor(Math.random() * (1024 / alignment));
-  return toPointer(random * alignment);
+  return new Pointer(random * alignment);
 };
 
 const addOffset = <T extends Data<string>>(
   pointer: Pointer<T>,
   offset: number,
-): Pointer<T> => toPointer(pointer + offset);
+): Value<number, Pointer<T>> =>
+  pointer.addOffset(offset).value as Value<number, Data<string>> as Value<
+    number,
+    Pointer<T>
+  >;
 
 Deno.test("iovec", async (t) => {
   await t.step("cast()", () => {
@@ -71,7 +75,7 @@ Deno.test("iovec", async (t) => {
     const offset = 8;
 
     const data = new DataView(memory.buffer);
-    data.setUint32(addOffset(pointer, offset), pointer, true);
+    data.setUint32(addOffset(pointer, offset), pointer.value, true);
     data.setUint32(addOffset(pointer, offset + 4), 16, true);
 
     assertEquals(
@@ -89,7 +93,7 @@ Deno.test("iovec", async (t) => {
     const offset = 8;
 
     const iovec = new Iovec({
-      buf: toPointer(100),
+      buf: new Pointer(100),
       buf_len: new Size(toValue(32)),
     });
     iovec.store(memory, toPointer(pointer), offset);
@@ -113,7 +117,7 @@ Deno.test("ciovec", async (t) => {
     const offset = 8;
 
     const data = new DataView(memory.buffer);
-    data.setUint32(addOffset(pointer, offset), pointer, true);
+    data.setUint32(addOffset(pointer, offset), pointer.value, true);
     data.setUint32(addOffset(pointer, offset + 4), 16, true);
 
     assertEquals(
@@ -131,7 +135,7 @@ Deno.test("ciovec", async (t) => {
     const offset = 8;
 
     const iovec = new Ciovec({
-      buf: toPointer(100),
+      buf: new Pointer(100),
       buf_len: new Size(toValue(32)),
     });
     iovec.store(memory, toPointer(pointer), offset);
@@ -956,10 +960,8 @@ Deno.test("timestamp", async (t) => {
 
   await t.step("monotonic", () => {
     assertEquals(
-      Timestamp.monotonic(),
-      new Timestamp(
-        BigInt(performance.now()) * 1_000_000n as BigValue<Timestamp>,
-      ),
+      Timestamp.monotonic().value / 1_000_000n,
+      BigInt(Math.floor(performance.now())),
     );
   });
 });
@@ -1748,7 +1750,7 @@ Deno.test("dirnamlen", async (t) => {
     const pointer = randomPointer(Dirnamlen);
     const offset = 8;
 
-    const dirnamlen = new Dirnamlen(24 as Value<Dirnamlen>);
+    const dirnamlen = new Dirnamlen(24);
     dirnamlen.store(memory, toPointer(pointer), offset);
 
     assertEquals(

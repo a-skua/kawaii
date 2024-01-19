@@ -65,7 +65,7 @@ export class Exit {
 // sched_yield() -> Result<(), errno>
 //
 // Temporarily yield execution of the calling thread. Note: This is similar to sched_yield in POSIX.
-export function sched_yield(): Value<Errno> {
+export function sched_yield(): Value<number, Errno> {
   return Errno.nosys;
 }
 
@@ -74,7 +74,7 @@ export function sched_yield(): Value<Errno> {
 // Terminate the process normally. An exit code of 0 indicates successful
 // termination of the program. The meanings of other values is dependent on the
 // environment.
-export function proc_exit(rval: Value<Exitcode>) {
+export function proc_exit(rval: Value<number, Exitcode>): void {
   throw new Exit(new Exitcode(rval));
 }
 
@@ -83,20 +83,20 @@ export function proc_exit(rval: Value<Exitcode>) {
 // Read command-line argument data. The size of the array should match that
 // returned by args_sizes_get. Each argument is expected to be \0 terminated.
 export function args_get(
-  argv: Pointer<Pointer<U8<string>>>,
-  argv_buf: Pointer<U8<string>>,
-): Value<Errno> {
+  argv: Value<number, Pointer<Pointer<U8<string>>>>,
+  argv_buf: Value<number, Pointer<U8<string>>>,
+): Value<number, Errno> {
   const data = new DataView(memory.buffer);
   const array = new Uint8Array(memory.buffer);
 
   for (const arg of args) {
     data.setUint32(argv, argv_buf, true);
-    argv = argv + 4 as Pointer<Pointer<U8<string>>>;
+    argv = argv + 4 as Value<number, Pointer<Pointer<U8<string>>>>;
     const { written } = encoder.encodeInto(
       `${arg}\0`,
       array.subarray(argv_buf),
     );
-    argv_buf = argv_buf + written as Pointer<U8<string>>;
+    argv_buf = argv_buf + written as Value<number, Pointer<U8<string>>>;
   }
   return Errno.success;
 }
@@ -105,9 +105,9 @@ export function args_get(
 //
 // Return command-line argument data sizes.
 export function args_sizes_get(
-  args_num: Pointer<Size>,
-  buf_size: Pointer<Size>,
-): Value<Errno> {
+  args_num: Value<number, Pointer<Size>>,
+  buf_size: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   const size = args.map((arg) => encoder.encode(`${arg}\0`).length).reduce((
     sum,
     len,
@@ -124,16 +124,16 @@ export function args_sizes_get(
 // Return the time value of a clock. Note: This is similar to clock_gettime in
 // POSIX.
 export function clock_time_get(
-  id: Value<Clockid>,
+  id: Value<number, Clockid>,
   _precision: BigValue<Timestamp>,
-  result: Pointer<Timestamp>,
-): Value<Errno> {
+  result: Value<number, Pointer<Timestamp>>,
+): Value<number, Errno> {
   const clockid = new Clockid(id);
   if (clockid.realtime) {
-    Timestamp.realtime().store(memory, result);
+    Timestamp.realtime().store(memory, new Pointer(result));
     return Errno.success;
   } else if (clockid.monotonic) {
-    Timestamp.monotonic().store(memory, result);
+    Timestamp.monotonic().store(memory, new Pointer(result));
     return Errno.success;
   } else {
     return Errno.notsup;
@@ -146,19 +146,19 @@ export function clock_time_get(
 // returned by `environ_sizes_get`. Key/value pairs are expected to be joined
 // with `=`s, and terminated with `\0`s.
 export function environ_get(
-  environ: Pointer<Pointer<U8<string>>>,
-  env_buf: Pointer<U8<string>>,
-): Value<Errno> {
+  environ: Value<number, Pointer<Pointer<U8<string>>>>,
+  env_buf: Value<number, Pointer<U8<string>>>,
+): Value<number, Errno> {
   const array = new Uint8Array(memory.buffer);
 
   for (let i = 0; i < envs.length; i += 1) {
-    Pointer.store(env_buf, memory, environ, Pointer.size * i);
+    new Pointer(env_buf).store(memory, new Pointer(environ), Pointer.size * i);
 
     const { written } = encoder.encodeInto(
       `${envs[i]}\0`,
       array.subarray(env_buf),
     );
-    env_buf = env_buf + written as Pointer<U8<string>>;
+    env_buf = env_buf + written as Value<number, Pointer<U8<string>>>;
   }
   return Errno.success;
 }
@@ -167,9 +167,9 @@ export function environ_get(
 //
 // Return environment variable data sizes.
 export function environ_sizes_get(
-  env_num: Pointer<Size>,
-  buf_size: Pointer<Size>,
-): Value<Errno> {
+  env_num: Value<number, Pointer<Size>>,
+  buf_size: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   const size = envs.map((env) => encoder.encode(`${env}\0`).length).reduce((
     sum,
     len,
@@ -189,19 +189,19 @@ export function environ_sizes_get(
 // regular file by other threads in the WASI process should not be interleaved
 // while write is executed.
 export function fd_write(
-  fd: Value<Fd>,
-  iovs: Pointer<CiovecArray>,
-  iovs_size: Value<Size>,
-  result: Pointer<Size>,
-): Value<Errno> {
+  fd: Value<number, Fd>,
+  iovs: Value<number, Pointer<CiovecArray>>,
+  iovs_size: Value<number, Size>,
+  result: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   let str = "";
   let len = 0;
 
   for (let i = 0; i < iovs_size; i++) {
-    const iov = Ciovec.cast(memory, iovs, Ciovec.size * i);
+    const iov = Ciovec.cast(memory, new Pointer(iovs), Ciovec.size * i);
 
     str += decoder.decode(
-      new Uint8Array(memory.buffer, iov.buf, iov.buf_len.value),
+      new Uint8Array(memory.buffer, iov.buf.value, iov.buf_len.value),
     );
     len += iov.buf_len.value;
   }
@@ -217,7 +217,7 @@ export function fd_write(
       return Errno.badf;
   }
 
-  (new Size(len as Value<Size>)).store(memory, result);
+  (new Size(len)).store(memory, new Pointer(result));
 
   return Errno.success;
 }
@@ -231,9 +231,9 @@ export function fd_write(
 // pseudo-random number generator, rather than to provide the random data
 // directly.
 export function random_get(
-  buf: Pointer<U8<string>>,
-  len: Value<Size>,
-): Value<Errno> {
+  buf: Value<number, Pointer<U8<string>>>,
+  len: Value<number, Size>,
+): Value<number, Errno> {
   crypto.getRandomValues(new Uint8Array(memory.buffer, buf, len));
   return Errno.success;
 }
@@ -244,21 +244,25 @@ export function random_get(
 // If nsubscriptions is 0, returns errno::inval.
 export function poll_oneoff(
   // The events to which to subscribe.
-  ins: Pointer<Subscription>,
+  ins: Value<number, Pointer<Subscription>>,
   // The events that have occurred.
-  out: Pointer<Event>,
+  out: Value<number, Pointer<Event>>,
   // Both the number of subscriptions and events.
-  nsubscriptions: Value<Size>,
+  nsubscriptions: Value<number, Size>,
   // The number of events stored.
-  result: Pointer<Size>,
-): Value<Errno> {
+  result: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   if (nsubscriptions === 0) {
     return Errno.inval;
   }
 
   let count = 0;
   for (let i = 0; i < nsubscriptions; i += 1) {
-    const subscription = Subscription.cast(memory, ins, Subscription.size * i);
+    const subscription = Subscription.cast(
+      memory,
+      new Pointer(ins),
+      Subscription.size * i,
+    );
 
     if (subscription.u.type.clock) {
       const event = new Event({
@@ -267,7 +271,7 @@ export function poll_oneoff(
         type: subscription.u.type,
         fd_readwrite: EventFdReadwrite.zero(),
       });
-      event.store(memory, out);
+      event.store(memory, new Pointer(out));
       count += 1;
     } else if (subscription.u.type.fd_read || subscription.u.type.fd_write) {
       const event = new Event({
@@ -276,14 +280,14 @@ export function poll_oneoff(
         type: subscription.u.type,
         fd_readwrite: EventFdReadwrite.zero(),
       });
-      event.store(memory, out);
+      event.store(memory, new Pointer(out));
       count += 1;
     }
-    out = out + Event.size as Pointer<Event>;
+    out = out + Event.size as Value<number, Pointer<Event>>;
   }
 
-  const size = new Size(count as Value<Size>);
-  size.store(memory, result);
+  const size = new Size(count);
+  size.store(memory, new Pointer(result));
 
   return Errno.success;
 }
@@ -291,7 +295,7 @@ export function poll_oneoff(
 // fd_close(fd: fd) -> Result<(), errno>
 //
 // Close a file descriptor. Note: This is similar to close in POSIX.
-export function fd_close(fd: Value<Fd>): Value<Errno> {
+export function fd_close(fd: Value<number, Fd>): Value<number, Errno> {
   FS.closeByFd(new Fd(fd));
   return Errno.success;
 }
@@ -300,9 +304,9 @@ export function fd_close(fd: Value<Fd>): Value<Errno> {
 //
 // Return the attributes of an open file.
 export function fd_filestat_get(
-  _fd: Fd,
-  _result: Pointer<Filestat>,
-): Value<Errno> {
+  _fd: Value<number, Fd>,
+  _result: Value<number, Pointer<Filestat>>,
+): Value<number, Errno> {
   return Errno.nosys;
 }
 
@@ -311,11 +315,11 @@ export function fd_filestat_get(
 // Read from a file descriptor, without using and updating the file descriptor's
 // offset. Note: This is similar to preadv in Linux (and other Unix-es).
 export function fd_pread(
-  _fd: Fd,
-  _iovs: Pointer<IovecArray>,
+  _fd: Value<number, Fd>,
+  _iovs: Value<number, Pointer<IovecArray>>,
   _offset: BigValue<Filesize>,
-  _result: Pointer<Size>,
-): Value<Errno> {
+  _result: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   return Errno.nosys;
 }
 
@@ -328,11 +332,11 @@ export function fd_pread(
 // not be interleaved while pwrite is executed.
 
 export function fd_pwrite(
-  _fd: Fd,
-  _iovs: Pointer<CiovecArray>,
+  _fd: Value<number, Fd>,
+  _iovs: Value<number, Pointer<CiovecArray>>,
   _offset: BigValue<Filesize>,
-  _result: Pointer<Size>,
-): Value<Errno> {
+  _result: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   return Errno.nosys;
 }
 
@@ -340,10 +344,10 @@ export function fd_pwrite(
 //
 // Read from a file descriptor. Note: This is similar to readv in POSIX.
 export function fd_read(
-  _fd: Fd,
-  _iovs: Pointer<IovecArray>,
-  _result: Pointer<Size>,
-): Value<Errno> {
+  fd: Value<number, Fd>,
+  iovs: Value<number, Pointer<IovecArray>>,
+  result: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   return Errno.nosys;
 }
 
@@ -352,15 +356,15 @@ export function fd_read(
 // Get the attributes of a file descriptor. Note: This returns similar flags
 // to fcntl(fd, F_GETFL) in POSIX, as well as additional fields.
 export function fd_fdstat_get(
-  fd: Value<Fd>,
-  result: Pointer<Fdstat>,
-): Value<Errno> {
+  fd: Value<number, Fd>,
+  result: Value<number, Pointer<Fdstat>>,
+): Value<number, Errno> {
   const file = FS.findByFd(new Fd(fd));
   if (!file) {
     return Errno.badf;
   }
 
-  file.wasi_fdstat().store(memory, result);
+  file.wasi_fdstat().store(memory, new Pointer(result));
   return Errno.success;
 }
 
@@ -369,10 +373,10 @@ export function fd_fdstat_get(
 // Adjust the flags associated with a file descriptor. Note: This is similar
 // to fcntl(fd, F_SETFL, flags) in POSIX.
 export function fd_fdstat_set_flags(
-  fd: Value<Fd>,
+  fd: Value<number, Fd>,
   // The desired values of the file descriptor flags.
-  flags: Value<Fdflags>,
-): Value<Errno> {
+  flags: Value<number, Fdflags>,
+): Value<number, Errno> {
   const file = FS.findByFd(new Fd(fd));
   if (!file) {
     return Errno.badf;
@@ -386,9 +390,9 @@ export function fd_fdstat_set_flags(
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_get(
-  _fd: Value<Fd>,
-  _result: Pointer<Prestat>,
-): Value<Errno> {
+  _fd: Value<number, Fd>,
+  _result: Value<number, Pointer<Prestat>>,
+): Value<number, Errno> {
   return Errno.badf;
 }
 
@@ -397,10 +401,10 @@ export function fd_prestat_get(
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_dir_name(
-  _fd: Fd,
-  _path: Pointer<U8<string>>,
-  _path_len: Size,
-): Value<Errno> {
+  _fd: Value<number, Fd>,
+  _path: Value<number, Pointer<U8<string>>>,
+  _path_len: Value<number, Size>,
+): Value<number, Errno> {
   return Errno.nosys;
 }
 
@@ -415,16 +419,16 @@ export function fd_prestat_dir_name(
 // allows the caller to grow its read buffer size in case it's too small to fit
 // a single large directory entry, or skip the oversized directory entry.
 export function fd_readdir(
-  fd: Value<Fd>,
+  fd: Value<number, Fd>,
   // The buffer where directory entries are stored
-  buf: Pointer<U8<string>>,
-  buf_len: Value<Size>,
+  buf: Value<number, Pointer<U8<string>>>,
+  buf_len: Value<number, Size>,
   // The location within the directory to start reading
   cookie: BigValue<Dircookie>,
   // The number of bytes stored in the read buffer. If less than the size of the
   // read buffer, the end of the directory has been reached.
-  result: Pointer<Size>,
-): Value<Errno> {
+  result: Value<number, Pointer<Size>>,
+): Value<number, Errno> {
   const dir = FS.findByFd(new Fd(fd));
   if (!dir) {
     return Errno.badf;
@@ -433,36 +437,36 @@ export function fd_readdir(
   const offset = new Dircookie(cookie);
   const children = dir.children.slice(offset.number);
   if (!children.length) {
-    new Size(0).store(memory, result);
+    new Size(0).store(memory, new Pointer(result));
     return Errno.success;
   }
 
   const child = children[0];
   child.wasi_dirent(offset.next()).store(
     memory,
-    buf as Pointer<Data<string>> as Pointer<Dirent>,
+    new Pointer(buf),
   );
 
   const { written } = encoder.encodeInto(
     child.name.str,
     new Uint8Array(memory.buffer, buf + Dirent.size, buf_len - Dirent.size),
   );
-  new Size(Dirent.size + written).store(memory, result);
+  new Size(Dirent.size + written).store(memory, new Pointer(result));
   return Errno.success;
 }
 
 // Return the attributes of a file or directory. Note: This is similar to `stat`
 // in POSIX.
 export function path_filestat_get(
-  _fd: Value<Fd>,
+  _fd: Value<number, Fd>,
   // Flags determining the method of how the path is resolved.
-  _flags: Value<Lookupflags>,
+  _flags: Value<number, Lookupflags>,
   // The path of the file or directory to inspect.
-  path_buf: Pointer<U8<string>>,
-  path_len: Value<Size>,
+  path_buf: Value<number, Pointer<U8<string>>>,
+  path_len: Value<number, Size>,
   // The buffer where the file's attributes are stored.
-  result: Pointer<Filestat>,
-): Value<Errno> {
+  result: Value<number, Pointer<Filestat>>,
+): Value<number, Errno> {
   const path = decoder.decode(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
@@ -472,7 +476,7 @@ export function path_filestat_get(
     return Errno.noent;
   }
 
-  file.wasi_filestat().store(memory, result);
+  file.wasi_filestat().store(memory, new Pointer(result));
   return Errno.success;
 }
 
@@ -483,15 +487,15 @@ export function path_filestat_get(
 // descriptor is guaranteed to be less than 2**31. Note: This is similar to
 // `openat` in POSIX.
 export function path_open(
-  _fd: Value<Fd>,
+  _fd: Value<number, Fd>,
   // Flags determining the method of how the path is resolved.
-  _dirflags: Value<Lookupflags>,
+  _dirflags: Value<number, Lookupflags>,
   // The relative path of the file or directory to open, relative to the
   // `path_open::fd` directory.
-  path_buf: Pointer<U8<string>>,
-  path_len: Value<Size>,
+  path_buf: Value<number, Pointer<U8<string>>>,
+  path_len: Value<number, Size>,
   // The method by which to open the file.
-  _oflags: Value<Oflags>,
+  _oflags: Value<number, Oflags>,
   // The initial rights of the newly created file descriptor. The implementation
   // is allowed to return a file descriptor with fewer rights than specified, if
   // and only if those rights do not apply to the type of file being opened. The
@@ -500,46 +504,58 @@ export function path_open(
   // file descriptors derived from it.
   _fs_rights_base: BigValue<Rights>,
   _fs_rights_inheriting: BigValue<Rights>,
-  _fdflags: Value<Fdflags>,
+  _fdflags: Value<number, Fdflags>,
   // The file descriptor of the file that has been opened.
-  result: Pointer<Fd>,
-): Value<Errno> {
+  result: Value<number, Pointer<Fd>>,
+): Value<number, Errno> {
   const path = decoder.decode(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
+
+  console.debug(path);
 
   const file = FS.find(path);
   if (!file) {
     return Errno.noent;
   }
 
-  FS.open(file).store(memory, result);
+  FS.open(file).store(memory, new Pointer(result));
   return Errno.success;
 }
 
-export const Module = {
-  sched_yield,
-  proc_exit,
-  args_get,
-  args_sizes_get,
-  clock_time_get,
-  environ_get,
-  environ_sizes_get,
-  fd_write,
-  random_get,
-  poll_oneoff,
-  fd_close,
-  fd_filestat_get,
-  fd_pread,
-  fd_pwrite,
-  fd_read,
-  fd_fdstat_get,
-  fd_fdstat_set_flags,
-  fd_prestat_get,
-  fd_prestat_dir_name,
-  fd_readdir,
-  path_filestat_get,
-  path_open,
+export function path_readlink(): Value<number, Errno> {
+  return Errno.nosys;
+}
+
+type Fn = (
+  ...args: Value<number | bigint, Data<string>>[]
+) => Value<number, Errno> | void;
+export const Module: {
+  [key: string]: Fn;
+} = {
+  sched_yield: sched_yield as Fn,
+  proc_exit: proc_exit as Fn,
+  args_get: args_get as Fn,
+  args_sizes_get: args_sizes_get as Fn,
+  clock_time_get: clock_time_get as Fn,
+  environ_get: environ_get as Fn,
+  environ_sizes_get: environ_sizes_get as Fn,
+  fd_write: fd_write as Fn,
+  random_get: random_get as Fn,
+  poll_oneoff: poll_oneoff as Fn,
+  fd_close: fd_close as Fn,
+  fd_filestat_get: fd_filestat_get as Fn,
+  fd_pread: fd_pread as Fn,
+  fd_pwrite: fd_pwrite as Fn,
+  fd_read: fd_read as Fn,
+  fd_fdstat_get: fd_fdstat_get as Fn,
+  fd_fdstat_set_flags: fd_fdstat_set_flags as Fn,
+  fd_prestat_get: fd_prestat_get as Fn,
+  fd_prestat_dir_name: fd_prestat_dir_name as Fn,
+  fd_readdir: fd_readdir as Fn,
+  path_filestat_get: path_filestat_get as Fn,
+  path_open: path_open as Fn,
+  path_readlink: path_readlink as Fn,
 };
 
 export type Module = typeof Module;

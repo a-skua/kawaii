@@ -1,4 +1,4 @@
-# kaWAii
+# ka[wa]ii
 
 ```plane
     |`\_/`|

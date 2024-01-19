@@ -4,44 +4,13 @@ export interface Data<T extends string> {
   readonly __data: T;
 }
 
-// Pointer
-export type Pointer<T extends Data<string>> = number & { __pointer: T } & {
-  __data: string;
+// Value
+export type Value<V extends (number | bigint), T extends Data<string>> = V & {
+  __value: T;
 };
 
-type Offset = number;
-
-const addOffset = <T extends Data<string>>(
-  ptr: Pointer<T>,
-  offset: Offset,
-): Pointer<T> => (ptr + offset) as Pointer<T>;
-
-export const Pointer = Object.freeze({
-  size: 4,
-  cast: <T extends Data<string>>(
-    mem: Memory,
-    ptr: Pointer<Pointer<T>>,
-    offset: Offset = 0,
-  ): Pointer<T> => {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Pointer.size);
-    return data.getUint32(0, true) as Pointer<T>;
-  },
-  store: <T extends Data<string>>(
-    value: Pointer<T>,
-    mem: Memory,
-    ptr: Pointer<Pointer<T>>,
-    offset: Offset = 0,
-  ) => {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Pointer.size);
-    data.setUint32(0, value, true);
-  },
-});
-
-// Value
-export type Value<T extends Data<string>> = number & { __value: T };
-
 // BigValue
-export type BigValue<T extends Data<string>> = bigint & { __bigValue: T };
+export type BigValue<T extends Data<string>> = Value<bigint, T>;
 
 // U8
 export abstract class U8<T extends string> implements Data<T> {
@@ -51,16 +20,16 @@ export abstract class U8<T extends string> implements Data<T> {
   static readonly size = 1;
   static readonly alignment = 1;
 
-  readonly value: Value<U8<T>>;
+  readonly value: Value<number, U8<T>>;
 
   constructor(
-    value: Value<U8<T>> | number,
+    value: Value<number, U8<T>> | number,
   ) {
-    this.value = value as Value<U8<T>>;
+    this.value = value as Value<number, U8<T>>;
   }
 
   store(mem: Memory, ptr: Pointer<U8<T>>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U8.size);
+    const data = new DataView(mem.buffer, ptr.addOffset(offset).value, U8.size);
     data.setUint8(0, this.value);
   }
 
@@ -68,9 +37,9 @@ export abstract class U8<T extends string> implements Data<T> {
     mem: Memory,
     ptr: Pointer<U8<string>>,
     offset: Offset,
-  ): Value<U8<string>> {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U8.size);
-    return data.getUint8(0) as Value<U8<string>>;
+  ): Value<number, U8<string>> {
+    const data = new DataView(mem.buffer, ptr.addOffset(offset).value, U8.size);
+    return data.getUint8(0) as Value<number, U8<string>>;
   }
 }
 
@@ -81,16 +50,20 @@ abstract class U16<T extends string> implements Data<T> {
   static readonly size = 2;
   static readonly alignment = 2;
 
-  readonly value: Value<U16<T>>;
+  readonly value: Value<number, U16<T>>;
 
   constructor(
-    value: Value<U16<T>> | number,
+    value: Value<number, U16<T>> | number,
   ) {
-    this.value = value as Value<U16<T>>;
+    this.value = value as Value<number, U16<T>>;
   }
 
   store(mem: Memory, ptr: Pointer<U16<T>>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U16.size);
+    const data = new DataView(
+      mem.buffer,
+      ptr.addOffset(offset).value,
+      U16.size,
+    );
     data.setUint16(0, this.value, true);
   }
 
@@ -98,9 +71,13 @@ abstract class U16<T extends string> implements Data<T> {
     mem: Memory,
     ptr: Pointer<U16<string>>,
     offset: Offset,
-  ): Value<U16<string>> {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U16.size);
-    return data.getUint16(0, true) as Value<U16<string>>;
+  ): Value<number, U16<string>> {
+    const data = new DataView(
+      mem.buffer,
+      ptr.addOffset(offset).value,
+      U16.size,
+    );
+    return data.getUint16(0, true) as Value<number, U16<string>>;
   }
 }
 
@@ -111,16 +88,20 @@ abstract class U32<T extends string> implements Data<T> {
   static readonly size = 4;
   static readonly alignment = 4;
 
-  readonly value: Value<U32<T>>;
+  readonly value: Value<number, U32<T>>;
 
   constructor(
-    value: Value<U32<T>> | number,
+    value: Value<number, U32<T>> | number,
   ) {
-    this.value = value as Value<U32<T>>;
+    this.value = value as Value<number, U32<T>>;
   }
 
   store(mem: Memory, ptr: Pointer<U32<T>>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U32.size);
+    const data = new DataView(
+      mem.buffer,
+      ptr.addOffset(offset).value,
+      U32.size,
+    );
     data.setUint32(0, this.value, true);
   }
 
@@ -128,9 +109,13 @@ abstract class U32<T extends string> implements Data<T> {
     mem: Memory,
     ptr: Pointer<U32<string>>,
     offset: Offset,
-  ): Value<U32<string>> {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U32.size);
-    return data.getUint32(0, true) as Value<U32<string>>;
+  ): Value<number, U32<string>> {
+    const data = new DataView(
+      mem.buffer,
+      ptr.addOffset(offset).value,
+      U32.size,
+    );
+    return data.getUint32(0, true) as Value<number, U32<string>>;
   }
 }
 
@@ -150,7 +135,11 @@ abstract class U64<T extends string> implements Data<T> {
   }
 
   store(mem: Memory, ptr: Pointer<U64<T>>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U64.size);
+    const data = new DataView(
+      mem.buffer,
+      ptr.addOffset(offset).value,
+      U64.size,
+    );
     data.setBigUint64(0, this.value, true);
   }
 
@@ -159,8 +148,32 @@ abstract class U64<T extends string> implements Data<T> {
     ptr: Pointer<U64<string>>,
     offset: Offset,
   ): BigValue<U64<string>> {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), U64.size);
+    const data = new DataView(
+      mem.buffer,
+      ptr.addOffset(offset).value,
+      U64.size,
+    );
     return data.getBigUint64(0, true) as BigValue<U64<string>>;
+  }
+}
+
+type Offset = number;
+
+export class Pointer<T extends Data<string>> extends U32<"pointer"> {
+  readonly __data = "pointer";
+
+  static cast(
+    mem: Memory,
+    ptr: Pointer<Data<string>>,
+    offset: Offset = 0,
+  ): Pointer<Data<string>> {
+    return new Pointer(
+      this.getValue(mem, ptr, offset),
+    );
+  }
+
+  addOffset(offset: Offset): Pointer<T> {
+    return new Pointer<T>(this.value + offset);
   }
 }
 
@@ -173,7 +186,7 @@ export class Size extends U32<"size"> {
     ptr: Pointer<Size>,
     offset: Offset = 0,
   ): Size {
-    return new Size(Size.getValue(mem, ptr, offset) as Value<Size>);
+    return new Size(Size.getValue(mem, ptr, offset));
   }
 }
 
@@ -208,7 +221,7 @@ export class Timestamp extends U64<"timestamp"> {
 
   static monotonic(): Timestamp {
     return new Timestamp(
-      BigInt(performance.now()) * 1_000_000n as BigValue<Timestamp>,
+      BigInt(performance.now() * 1_000_000) as BigValue<Timestamp>,
     );
   }
 
@@ -217,51 +230,28 @@ export class Timestamp extends U64<"timestamp"> {
     ptr: Pointer<Timestamp>,
     offset: Offset = 0,
   ): Timestamp {
-    return new Timestamp(
-      Timestamp.getValue(mem, ptr, offset) as BigValue<Timestamp>,
-    );
-  }
-
-  store(mem: Memory, ptr: Pointer<Timestamp>, offset: Offset = 0) {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Timestamp.size,
-    );
-    data.setBigUint64(0, this.value, true);
+    return new Timestamp(this.getValue(mem, ptr, offset));
   }
 }
 
 // Identifiers for clocks.
-export class Clockid implements Data<"clockid"> {
+export class Clockid extends U32<"clockid"> {
   readonly __data = "clockid";
 
   static readonly size = 4;
   static readonly alignment = 4;
-
-  constructor(
-    readonly value: Value<Clockid>,
-  ) {}
 
   static cast(
     mem: Memory,
     ptr: Pointer<Clockid>,
     offset: Offset = 0,
   ): Clockid {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Clockid.size);
-    return new Clockid(
-      data.getUint32(0, true) as Value<Clockid>,
-    );
-  }
-
-  store(mem: Memory, ptr: Pointer<Clockid>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Clockid.size);
-    data.setUint32(0, this.value, true);
+    return new Clockid(this.getValue(mem, ptr, offset));
   }
 
   // The clock measuring real time. Time value zero corresponds with
   // 1970-01-01T00:00:00Z.
-  static readonly realtime = 0 as Value<Clockid>;
+  static readonly realtime = 0 as Value<number, Clockid>;
 
   get realtime(): boolean {
     return this.value === Clockid.realtime;
@@ -271,21 +261,21 @@ export class Clockid implements Data<"clockid"> {
   // time, whose value cannot be adjusted and which cannot have negative clock
   // jumps. The epoch of this clock is undefined. The absolute time value of
   // this clock therefore has no meaning.
-  static readonly monotonic = 1 as Value<Clockid>;
+  static readonly monotonic = 1 as Value<number, Clockid>;
 
   get monotonic(): boolean {
     return this.value === Clockid.monotonic;
   }
 
   // The CPU-time clock associated with the current process.
-  static readonly process_cputime_id = 2 as Value<Clockid>;
+  static readonly process_cputime_id = 2 as Value<number, Clockid>;
 
   get process_cputime_id(): boolean {
     return this.value === Clockid.process_cputime_id;
   }
 
   // The CPU-time clock associated with the current thread.
-  static readonly thread_cputime_id = 3 as Value<Clockid>;
+  static readonly thread_cputime_id = 3 as Value<number, Clockid>;
 
   get thread_cputime_id(): boolean {
     return this.value === Clockid.thread_cputime_id;
@@ -303,254 +293,250 @@ export class Errno extends U16<"errno"> {
     ptr: Pointer<Errno>,
     offset: Offset = 0,
   ): Errno {
-    return new Errno(this.getValue(mem, ptr, offset) as Value<Errno>);
+    return new Errno(this.getValue(mem, ptr, offset));
   }
 
   // No error occurred. System call completed successfully.
-  static readonly success = 0 as Value<Errno>;
+  static readonly success = 0 as Value<number, Errno>;
 
   // Argument list too long.
-  static readonly toobig = 1 as Value<Errno>;
+  static readonly toobig = 1 as Value<number, Errno>;
 
   // Permission denied.
-  static readonly acces = 2 as Value<Errno>;
+  static readonly acces = 2 as Value<number, Errno>;
 
   // Address in use.
-  static readonly addrinuse = 3 as Value<Errno>;
+  static readonly addrinuse = 3 as Value<number, Errno>;
 
   // Address not available.
-  static readonly addrnotavail = 4 as Value<Errno>;
+  static readonly addrnotavail = 4 as Value<number, Errno>;
 
   // Address family not supported.
-  static readonly afnosupport = 5 as Value<Errno>;
+  static readonly afnosupport = 5 as Value<number, Errno>;
 
   // Resource unavailable, or operation would block.
-  static readonly again = 6 as Value<Errno>;
+  static readonly again = 6 as Value<number, Errno>;
 
   // Connection already in progress.
-  static readonly already = 7 as Value<Errno>;
+  static readonly already = 7 as Value<number, Errno>;
 
   // Bad file descriptor.
-  static readonly badf = 8 as Value<Errno>;
+  static readonly badf = 8 as Value<number, Errno>;
 
   // Bad message.
-  static readonly badmsg = 9 as Value<Errno>;
+  static readonly badmsg = 9 as Value<number, Errno>;
 
   // Device or resource busy.
-  static readonly busy = 10 as Value<Errno>;
+  static readonly busy = 10 as Value<number, Errno>;
 
   // Operation canceled.
-  static readonly canceled = 11 as Value<Errno>;
+  static readonly canceled = 11 as Value<number, Errno>;
 
   // No child processes.
-  static readonly child = 12 as Value<Errno>;
+  static readonly child = 12 as Value<number, Errno>;
 
   // Connection aborted.
-  static readonly connaborted = 13 as Value<Errno>;
+  static readonly connaborted = 13 as Value<number, Errno>;
 
   // connrefused Connection refused.
-  static readonly connrefused = 14 as Value<Errno>;
+  static readonly connrefused = 14 as Value<number, Errno>;
 
   // connreset Connection reset.
-  static readonly connreset = 15 as Value<Errno>;
+  static readonly connreset = 15 as Value<number, Errno>;
 
   // Resource deadlock would occur.
-  static readonly deadlk = 16 as Value<Errno>;
+  static readonly deadlk = 16 as Value<number, Errno>;
 
   // Destination address required.
-  static readonly destaddrreq = 17 as Value<Errno>;
+  static readonly destaddrreq = 17 as Value<number, Errno>;
 
   // Mathematics argument out of domain of function.
-  static readonly dom = 18 as Value<Errno>;
+  static readonly dom = 18 as Value<number, Errno>;
 
   // Reserved.
-  static readonly dquot = 19 as Value<Errno>;
+  static readonly dquot = 19 as Value<number, Errno>;
 
   // File exists.
-  static readonly exist = 20 as Value<Errno>;
+  static readonly exist = 20 as Value<number, Errno>;
 
   // Bad address.
-  static readonly fault = 21 as Value<Errno>;
+  static readonly fault = 21 as Value<number, Errno>;
 
   // File too large.
-  static readonly fbig = 22 as Value<Errno>;
+  static readonly fbig = 22 as Value<number, Errno>;
 
   // Host is unreachable.
-  static readonly hostunreach = 23 as Value<Errno>;
+  static readonly hostunreach = 23 as Value<number, Errno>;
 
   // Identifier removed.
-  static readonly idrm = 24 as Value<Errno>;
+  static readonly idrm = 24 as Value<number, Errno>;
 
   // Illegal byte sequence.
-  static readonly ilseq = 25 as Value<Errno>;
+  static readonly ilseq = 25 as Value<number, Errno>;
 
   // Operation in progress.
-  static readonly inprogress = 26 as Value<Errno>;
+  static readonly inprogress = 26 as Value<number, Errno>;
 
   // Interrupted function.
-  static readonly intr = 27 as Value<Errno>;
+  static readonly intr = 27 as Value<number, Errno>;
 
   // Invalid argument.
-  static readonly inval = 28 as Value<Errno>;
+  static readonly inval = 28 as Value<number, Errno>;
 
   // I/O error.
-  static readonly io = 29 as Value<Errno>;
+  static readonly io = 29 as Value<number, Errno>;
 
   // Socket is connected.
-  static readonly isconn = 30 as Value<Errno>;
+  static readonly isconn = 30 as Value<number, Errno>;
 
   // Is a directory.
-  static readonly isdir = 31 as Value<Errno>;
+  static readonly isdir = 31 as Value<number, Errno>;
 
   // Too many levels of symbolic links.
-  static readonly loop = 32 as Value<Errno>;
+  static readonly loop = 32 as Value<number, Errno>;
 
   // File descriptor value too large.
-  static readonly mfile = 33 as Value<Errno>;
+  static readonly mfile = 33 as Value<number, Errno>;
 
   // Too many links.
-  static readonly mlink = 34 as Value<Errno>;
+  static readonly mlink = 34 as Value<number, Errno>;
 
   // Message too large.
-  static readonly msgsize = 35 as Value<Errno>;
+  static readonly msgsize = 35 as Value<number, Errno>;
 
   // Reserved.
-  static readonly multihop = 36 as Value<Errno>;
+  static readonly multihop = 36 as Value<number, Errno>;
 
   // Filename too long.
-  static readonly nametoolong = 37 as Value<Errno>;
+  static readonly nametoolong = 37 as Value<number, Errno>;
 
   // Network is down.
-  static readonly netdown = 38 as Value<Errno>;
+  static readonly netdown = 38 as Value<number, Errno>;
 
   // Connection aborted by network.
-  static readonly netreset = 39 as Value<Errno>;
+  static readonly netreset = 39 as Value<number, Errno>;
 
   // Network unreachable.
-  static readonly netunreach = 40 as Value<Errno>;
+  static readonly netunreach = 40 as Value<number, Errno>;
 
   // Too many files open in system.
-  static readonly nfile = 41 as Value<Errno>;
+  static readonly nfile = 41 as Value<number, Errno>;
 
   // No buffer space available.
-  static readonly nobufs = 42 as Value<Errno>;
+  static readonly nobufs = 42 as Value<number, Errno>;
 
   // No such device.
-  static readonly nodev = 43 as Value<Errno>;
+  static readonly nodev = 43 as Value<number, Errno>;
 
   // No such file or directory.
-  static readonly noent = 44 as Value<Errno>;
+  static readonly noent = 44 as Value<number, Errno>;
 
   // Executable file format error.
-  static readonly noexec = 45 as Value<Errno>;
+  static readonly noexec = 45 as Value<number, Errno>;
 
   // No locks available.
-  static readonly nolck = 46 as Value<Errno>;
+  static readonly nolck = 46 as Value<number, Errno>;
 
   // Reserved.
-  static readonly nolink = 47 as Value<Errno>;
+  static readonly nolink = 47 as Value<number, Errno>;
 
   // Not enough space.
-  static readonly nomem = 48 as Value<Errno>;
+  static readonly nomem = 48 as Value<number, Errno>;
 
   // No message of the desired type.
-  static readonly nomsg = 49 as Value<Errno>;
+  static readonly nomsg = 49 as Value<number, Errno>;
 
   // Protocol not available.
-  static readonly noprotoopt = 50 as Value<Errno>;
+  static readonly noprotoopt = 50 as Value<number, Errno>;
 
   // No space left on device.
-  static readonly nospc = 51 as Value<Errno>;
+  static readonly nospc = 51 as Value<number, Errno>;
 
   // Function not supported.
-  static readonly nosys = 52 as Value<Errno>;
+  static readonly nosys = 52 as Value<number, Errno>;
 
   // The socket is not connected.
-  static readonly notconn = 53 as Value<Errno>;
+  static readonly notconn = 53 as Value<number, Errno>;
 
   // Not a directory or a symbolic link to a directory.
-  static readonly notdir = 54 as Value<Errno>;
+  static readonly notdir = 54 as Value<number, Errno>;
 
   // Directory not empty.
-  static readonly notempty = 55 as Value<Errno>;
+  static readonly notempty = 55 as Value<number, Errno>;
 
   // State not recoverable.
-  static readonly Notrecoverable = 56 as Value<Errno>;
+  static readonly Notrecoverable = 56 as Value<number, Errno>;
 
   // Not a socket.
-  static readonly notsock = 57 as Value<Errno>;
+  static readonly notsock = 57 as Value<number, Errno>;
 
   // Not supported, or operation not supported on socket.
-  static readonly notsup = 58 as Value<Errno>;
+  static readonly notsup = 58 as Value<number, Errno>;
 
   // Inappropriate I/O control operation.
-  static readonly notty = 59 as Value<Errno>;
+  static readonly notty = 59 as Value<number, Errno>;
 
   // No such device or address.
-  static readonly nxio = 60 as Value<Errno>;
+  static readonly nxio = 60 as Value<number, Errno>;
 
   // Value too large to be stored in data type.
-  static readonly overflow = 61 as Value<Errno>;
+  static readonly overflow = 61 as Value<number, Errno>;
 
   // Previous owner died.
-  static readonly ownerdead = 62 as Value<Errno>;
+  static readonly ownerdead = 62 as Value<number, Errno>;
 
   // Operation not permitted.
-  static readonly perm = 63 as Value<Errno>;
+  static readonly perm = 63 as Value<number, Errno>;
 
   // Broken pipe.
-  static readonly pipe = 64 as Value<Errno>;
+  static readonly pipe = 64 as Value<number, Errno>;
 
   // Protocol error.
-  static readonly proto = 65 as Value<Errno>;
+  static readonly proto = 65 as Value<number, Errno>;
 
   // Protocol not supported.
-  static readonly protonosupport = 66 as Value<Errno>;
+  static readonly protonosupport = 66 as Value<number, Errno>;
 
   // Protocol wrong type for socket.
-  static readonly prototypes = 67 as Value<Errno>;
+  static readonly prototypes = 67 as Value<number, Errno>;
 
   // Result too large.
-  static readonly range = 68 as Value<Errno>;
+  static readonly range = 68 as Value<number, Errno>;
 
   // Read-only file system.
-  static readonly rofs = 69 as Value<Errno>;
+  static readonly rofs = 69 as Value<number, Errno>;
 
   // Invalid seek.
-  static readonly spipe = 70 as Value<Errno>;
+  static readonly spipe = 70 as Value<number, Errno>;
 
   // No such process.
-  static readonly srch = 71 as Value<Errno>;
+  static readonly srch = 71 as Value<number, Errno>;
 
   // Reserved.
-  static readonly stale = 72 as Value<Errno>;
+  static readonly stale = 72 as Value<number, Errno>;
 
   // Connection timed out.
-  static readonly timedout = 73 as Value<Errno>;
+  static readonly timedout = 73 as Value<number, Errno>;
 
   // Text file busy.
-  static readonly txtbsy = 74 as Value<Errno>;
+  static readonly txtbsy = 74 as Value<number, Errno>;
 
   // Cross-device link.
-  static readonly xdev = 75 as Value<Errno>;
+  static readonly xdev = 75 as Value<number, Errno>;
 
   // Extension: Capabilities insufficient.
-  static readonly notcapable = 76 as Value<Errno>;
+  static readonly notcapable = 76 as Value<number, Errno>;
 }
 
 // File descriptor rights, determining which actions may be performed.
-export class Rights implements Data<"rights"> {
+export class Rights extends U64<"rights"> {
   readonly __data = "rights";
 
   static readonly size = 8;
   static readonly alignment = 8;
 
-  constructor(
-    private readonly flags: BigValue<Rights>,
-  ) {}
-
   static zero(): Rights {
-    return new Rights(0n as BigValue<Rights>);
+    return new Rights(0n);
   }
 
   static cast(
@@ -558,13 +544,7 @@ export class Rights implements Data<"rights"> {
     ptr: Pointer<Rights>,
     offset: Offset = 0,
   ): Rights {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Rights.size);
-    return new Rights(data.getBigUint64(0, true) as BigValue<Rights>);
-  }
-
-  store(mem: Memory, ptr: Pointer<Rights>, offset: Offset = 0) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset), Rights.size);
-    data.setBigUint64(0, this.flags, true);
+    return new Rights(this.getValue(mem, ptr, offset));
   }
 
   // The right to invoke fd_datasync. If path_open is set, includes the right to
@@ -572,7 +552,7 @@ export class Rights implements Data<"rights"> {
   static readonly fd_datasync = (1n << 0n) as BigValue<Rights>;
 
   get fd_datasync(): boolean {
-    return (this.flags & Rights.fd_datasync) > 0n;
+    return (this.value & Rights.fd_datasync) > 0n;
   }
 
   // The right to invoke fd_read and sock_recv. If rights::fd_seek is set,
@@ -580,21 +560,21 @@ export class Rights implements Data<"rights"> {
   static readonly fd_read = (1n << 1n) as BigValue<Rights>;
 
   get fd_read(): boolean {
-    return (this.flags & Rights.fd_read) > 0n;
+    return (this.value & Rights.fd_read) > 0n;
   }
 
   // The right to invoke fd_seek. This flag implies rights::fd_tell.
   static readonly fd_seek = (1n << 2n) as BigValue<Rights>;
 
   get fd_seek(): boolean {
-    return (this.flags & Rights.fd_seek) > 0n;
+    return (this.value & Rights.fd_seek) > 0n;
   }
 
   // The right to invoke fd_fdstat_set_flags.
   static readonly fd_fdstat_set_flags = (1n << 3n) as BigValue<Rights>;
 
   get fd_fdstat_set_flags(): boolean {
-    return (this.flags & Rights.fd_fdstat_set_flags) > 0n;
+    return (this.value & Rights.fd_fdstat_set_flags) > 0n;
   }
 
   // The right to invoke fd_sync. If path_open is set, includes the right to
@@ -602,7 +582,7 @@ export class Rights implements Data<"rights"> {
   static readonly fd_sync = (1n << 4n) as BigValue<Rights>;
 
   get fd_sync(): boolean {
-    return (this.flags & Rights.fd_sync) > 0n;
+    return (this.value & Rights.fd_sync) > 0n;
   }
 
   // The right to invoke fd_seek in such a way that the file offset remains
@@ -610,7 +590,7 @@ export class Rights implements Data<"rights"> {
   static readonly fd_tell = (1n << 5n) as BigValue<Rights>;
 
   get fd_tell(): boolean {
-    return (this.flags & Rights.fd_tell) > 0n;
+    return (this.value & Rights.fd_tell) > 0n;
   }
 
   // The right to invoke fd_write and sock_send. If rights::fd_seek is set,
@@ -618,35 +598,35 @@ export class Rights implements Data<"rights"> {
   static readonly fd_write = (1n << 6n) as BigValue<Rights>;
 
   get fd_write(): boolean {
-    return (this.flags & Rights.fd_write) > 0n;
+    return (this.value & Rights.fd_write) > 0n;
   }
 
   // The right to invoke fd_advise.
   static readonly fd_advise = (1n << 7n) as BigValue<Rights>;
 
   get fd_advise(): boolean {
-    return (this.flags & Rights.fd_advise) > 0n;
+    return (this.value & Rights.fd_advise) > 0n;
   }
 
   // The right to invoke fd_allocate.
   static readonly fd_allocate = (1n << 8n) as BigValue<Rights>;
 
   get fd_allocate(): boolean {
-    return (this.flags & Rights.fd_allocate) > 0n;
+    return (this.value & Rights.fd_allocate) > 0n;
   }
 
   // The right to invoke path_create_directory.
   static readonly path_create_directory = (1n << 9n) as BigValue<Rights>;
 
   get path_create_directory(): boolean {
-    return (this.flags & Rights.path_create_directory) > 0n;
+    return (this.value & Rights.path_create_directory) > 0n;
   }
 
   // If path_open is set, the right to invoke path_open with oflags::creat.
   static readonly path_create_file = (1n << 10n) as BigValue<Rights>;
 
   get path_create_file(): boolean {
-    return (this.flags & Rights.path_create_file) > 0n;
+    return (this.value & Rights.path_create_file) > 0n;
   }
 
   // The right to invoke path_link with the file descriptor as the source
@@ -654,7 +634,7 @@ export class Rights implements Data<"rights"> {
   static readonly path_link_source = (1n << 11n) as BigValue<Rights>;
 
   get path_link_source(): boolean {
-    return (this.flags & Rights.path_link_source) > 0n;
+    return (this.value & Rights.path_link_source) > 0n;
   }
 
   // The right to invoke path_link with the file descriptor as the target
@@ -662,27 +642,27 @@ export class Rights implements Data<"rights"> {
   static readonly path_link_target = (1n << 12n) as BigValue<Rights>;
 
   get path_link_target(): boolean {
-    return (this.flags & Rights.path_link_target) > 0n;
+    return (this.value & Rights.path_link_target) > 0n;
   }
 
   // The right to invoke path_open.
   static readonly path_open = (1n << 13n) as BigValue<Rights>;
 
   get path_open(): boolean {
-    return (this.flags & Rights.path_open) > 0n;
+    return (this.value & Rights.path_open) > 0n;
   }
 
   // The right to invoke fd_readdir.
   static readonly fd_readdir = (1n << 14n) as BigValue<Rights>;
   get fd_readdir(): boolean {
-    return (this.flags & Rights.fd_readdir) > 0n;
+    return (this.value & Rights.fd_readdir) > 0n;
   }
 
   // The right to invoke path_readlink.
   static readonly path_readlink = (1n << 15n) as BigValue<Rights>;
 
   get path_readlink(): boolean {
-    return (this.flags & Rights.path_readlink) > 0n;
+    return (this.value & Rights.path_readlink) > 0n;
   }
 
   // The right to invoke path_rename with the file descriptor as the source
@@ -690,7 +670,7 @@ export class Rights implements Data<"rights"> {
   static readonly path_rename_source = (1n << 16n) as BigValue<Rights>;
 
   get path_rename_source(): boolean {
-    return (this.flags & Rights.path_rename_source) > 0n;
+    return (this.value & Rights.path_rename_source) > 0n;
   }
 
   // The right to invoke path_rename with the file descriptor as the target
@@ -698,14 +678,14 @@ export class Rights implements Data<"rights"> {
   static readonly path_rename_target = (1n << 17n) as BigValue<Rights>;
 
   get path_rename_target(): boolean {
-    return (this.flags & Rights.path_rename_target) > 0n;
+    return (this.value & Rights.path_rename_target) > 0n;
   }
 
   // The right to invoke path_filestat_get.
   static readonly path_filestat_get = (1n << 18n) as BigValue<Rights>;
 
   get path_filestat_get(): boolean {
-    return (this.flags & Rights.path_filestat_get) > 0n;
+    return (this.value & Rights.path_filestat_get) > 0n;
   }
 
   // The right to change a file's size. If path_open is set, includes the right
@@ -719,55 +699,55 @@ export class Rights implements Data<"rights"> {
   static readonly path_filestat_set_size = (1n << 19n) as BigValue<Rights>;
 
   get path_filestat_set_size(): boolean {
-    return (this.flags & Rights.path_filestat_set_size) > 0n;
+    return (this.value & Rights.path_filestat_set_size) > 0n;
   }
 
   // The right to invoke path_filestat_set_times.
   static readonly path_filestat_set_times = (1n << 20n) as BigValue<Rights>;
   get path_filestat_set_times(): boolean {
-    return (this.flags & Rights.path_filestat_set_times) > 0n;
+    return (this.value & Rights.path_filestat_set_times) > 0n;
   }
 
   // The right to invoke fd_filestat_get.
   static readonly fd_filestat_get = (1n << 21n) as BigValue<Rights>;
 
   get fd_filestat_get(): boolean {
-    return (this.flags & Rights.fd_filestat_get) > 0n;
+    return (this.value & Rights.fd_filestat_get) > 0n;
   }
 
   // The right to invoke fd_filestat_set_size.
   static readonly fd_filestat_set_size = (1n << 22n) as BigValue<Rights>;
 
   get fd_filestat_set_size(): boolean {
-    return (this.flags & Rights.fd_filestat_set_size) > 0n;
+    return (this.value & Rights.fd_filestat_set_size) > 0n;
   }
 
   // The right to invoke fd_filestat_set_times.
   static readonly fd_filestat_set_times = (1n << 23n) as BigValue<Rights>;
 
   get fd_filestat_set_times(): boolean {
-    return (this.flags & Rights.fd_filestat_set_times) > 0n;
+    return (this.value & Rights.fd_filestat_set_times) > 0n;
   }
 
   // The right to invoke path_symlink.
   static readonly path_symlink = (1n << 24n) as BigValue<Rights>;
 
   get path_symlink(): boolean {
-    return (this.flags & Rights.path_symlink) > 0n;
+    return (this.value & Rights.path_symlink) > 0n;
   }
 
   // The right to invoke path_remove_directory.
   static readonly path_remove_directory = (1n << 25n) as BigValue<Rights>;
 
   get path_remove_directory(): boolean {
-    return (this.flags & Rights.path_remove_directory) > 0n;
+    return (this.value & Rights.path_remove_directory) > 0n;
   }
 
   // The right to invoke path_unlink_file.
   static readonly path_unlink_file = (1n << 26n) as BigValue<Rights>;
 
   get path_unlink_file(): boolean {
-    return (this.flags & Rights.path_unlink_file) > 0n;
+    return (this.value & Rights.path_unlink_file) > 0n;
   }
 
   // If rights::fd_read is set, includes the right to invoke poll_oneoff to
@@ -776,21 +756,21 @@ export class Rights implements Data<"rights"> {
   static readonly poll_fd_readwrite = (1n << 27n) as BigValue<Rights>;
 
   get poll_fd_readwrite(): boolean {
-    return (this.flags & Rights.poll_fd_readwrite) > 0n;
+    return (this.value & Rights.poll_fd_readwrite) > 0n;
   }
 
   // The right to invoke sock_shutdown.
   static readonly sock_shutdown = (1n << 28n) as BigValue<Rights>;
 
   get sock_shutdown(): boolean {
-    return (this.flags & Rights.sock_shutdown) > 0n;
+    return (this.value & Rights.sock_shutdown) > 0n;
   }
 
   // The right to invoke sock_accept.
   static readonly sock_accept = (1n << 29n) as BigValue<Rights>;
 
   get sock_accept(): boolean {
-    return (this.flags & Rights.sock_accept) > 0n;
+    return (this.value & Rights.sock_accept) > 0n;
   }
 }
 
@@ -803,22 +783,24 @@ export class Fd extends U32<"fd"> {
     ptr: Pointer<Fd>,
     offset: Offset = 0,
   ): Fd {
-    return new Fd(
-      this.getValue(mem, ptr, offset) as Value<Fd>,
-    );
+    return new Fd(this.getValue(mem, ptr, offset));
   }
 
-  static readonly stdin = 0 as Value<Fd>;
-  static readonly stdout = 1 as Value<Fd>;
-  static readonly stderr = 2 as Value<Fd>;
+  static readonly stdin = 0 as Value<number, Fd>;
+  static readonly stdout = 1 as Value<number, Fd>;
+  static readonly stderr = 2 as Value<number, Fd>;
 
   // Provide Fd.
   // See: path_open()
-  private static readonly provided = new Set([Fd.stdin, Fd.stdout, Fd.stderr]);
+  private static readonly provided = new Set<Value<number, Fd>>([
+    Fd.stdin,
+    Fd.stdout,
+    Fd.stderr,
+  ]);
 
   static provide(): Fd {
     while (true) {
-      const fd = Math.floor(Math.random() * (1 << 31)) as Value<Fd>;
+      const fd = Math.floor(Math.random() * (1 << 31)) as Value<number, Fd>;
       if (Fd.provided.has(fd)) {
         continue;
       }
@@ -867,8 +849,7 @@ export class Iovec implements Data<"iovec">, IovecParams {
   }
 
   store(mem: Memory, ptr: Pointer<Iovec>, offset: Offset = 0) {
-    Pointer.store(
-      this.buf,
+    this.buf.store(
       mem,
       ptr as Pointer<Data<string>> as Pointer<Pointer<U8<string>>>,
       offset,
@@ -929,8 +910,7 @@ export class Ciovec implements Data<"ciovec">, CiovecParams {
   }
 
   store(mem: Memory, ptr: Pointer<Ciovec>, offset: Offset = 0) {
-    Pointer.store(
-      this.buf,
+    this.buf.store(
       mem,
       ptr as Pointer<Data<string>> as Pointer<Pointer<U8<string>>>,
       offset,
@@ -983,7 +963,9 @@ export class Dirnamlen extends U32<"dirnamlen"> {
     ptr: Pointer<Dirnamlen>,
     offset: Offset = 0,
   ): Dirnamlen {
-    return new Dirnamlen(this.getValue(mem, ptr, offset) as Value<Dirnamlen>);
+    return new Dirnamlen(
+      this.getValue(mem, ptr, offset) as Value<number, Dirnamlen>,
+    );
   }
 }
 
@@ -1012,61 +994,61 @@ export class Filetype extends U8<"filetype"> {
     offset: Offset = 0,
   ): Filetype {
     return new Filetype(
-      Filetype.getValue(mem, ptr, offset) as Value<Filetype>,
+      Filetype.getValue(mem, ptr, offset) as Value<number, Filetype>,
     );
   }
 
   // The type of the file descriptor or file is unknown or is different from any of the other types specified.
-  static readonly unknown = 0 as Value<Filetype>;
+  static readonly unknown = 0 as Value<number, Filetype>;
 
   get unknown(): boolean {
     return this.value === Filetype.unknown;
   }
 
   // The file descriptor or file refers to a block device inode.
-  static readonly block_device = 1 as Value<Filetype>;
+  static readonly block_device = 1 as Value<number, Filetype>;
 
   get block_device(): boolean {
     return this.value === Filetype.block_device;
   }
 
   // The file descriptor or file refers to a character device inode.
-  static readonly character_device = 2 as Value<Filetype>;
+  static readonly character_device = 2 as Value<number, Filetype>;
 
   get character_device(): boolean {
     return this.value === Filetype.character_device;
   }
 
   // The file descriptor or file refers to a directory inode.
-  static readonly directory = 3 as Value<Filetype>;
+  static readonly directory = 3 as Value<number, Filetype>;
 
   get directory(): boolean {
     return this.value === Filetype.directory;
   }
 
   // The file descriptor or file refers to a regular file inode.
-  static readonly regular_file = 4 as Value<Filetype>;
+  static readonly regular_file = 4 as Value<number, Filetype>;
 
   get regular_file(): boolean {
     return this.value === Filetype.regular_file;
   }
 
   // The file descriptor or file refers to a datagram socket.
-  static readonly socket_dgram = 5 as Value<Filetype>;
+  static readonly socket_dgram = 5 as Value<number, Filetype>;
 
   get socket_dgram(): boolean {
     return this.value === Filetype.socket_dgram;
   }
 
   // The file descriptor or file refers to a byte-stream socket.
-  static readonly socket_stream = 6 as Value<Filetype>;
+  static readonly socket_stream = 6 as Value<number, Filetype>;
 
   get socket_stream(): boolean {
     return this.value === Filetype.socket_stream;
   }
 
   // The file refers to a symbolic link inode.
-  static readonly symbolic_link = 7 as Value<Filetype>;
+  static readonly symbolic_link = 7 as Value<number, Filetype>;
 
   get symbolic_link(): boolean {
     return this.value === Filetype.symbolic_link;
@@ -1158,7 +1140,7 @@ export class Fdflags extends U16<"fdflags"> {
   readonly __data = "fdflags";
 
   static zero(): Fdflags {
-    return new Fdflags(0 as Value<Fdflags>);
+    return new Fdflags(0 as Value<number, Fdflags>);
   }
 
   static cast(
@@ -1167,12 +1149,12 @@ export class Fdflags extends U16<"fdflags"> {
     offset: Offset = 0,
   ): Fdflags {
     return new Fdflags(
-      this.getValue(mem, ptr, offset) as Value<Fdflags>,
+      this.getValue(mem, ptr, offset) as Value<number, Fdflags>,
     );
   }
 
   // Append mode: Data written to the file is always appended to the file's end.
-  static readonly append = 1 << 0 as Value<Fdflags>;
+  static readonly append = 1 << 0 as Value<number, Fdflags>;
 
   get append(): boolean {
     return (this.value & Fdflags.append) > 0;
@@ -1180,21 +1162,21 @@ export class Fdflags extends U16<"fdflags"> {
 
   // Write according to synchronized I/O data integrity completion. Only the
   // data stored in the file is synchronized.
-  static readonly dsync = 1 << 1 as Value<Fdflags>;
+  static readonly dsync = 1 << 1 as Value<number, Fdflags>;
 
   get dsync(): boolean {
     return (this.value & Fdflags.dsync) > 0;
   }
 
   // Non-blocking mode
-  static readonly nonblock = 1 << 2 as Value<Fdflags>;
+  static readonly nonblock = 1 << 2 as Value<number, Fdflags>;
 
   get nonblock(): boolean {
     return (this.value & Fdflags.nonblock) > 0;
   }
 
   // Synchronized read I/O operations.
-  static readonly rsync = 1 << 3 as Value<Fdflags>;
+  static readonly rsync = 1 << 3 as Value<number, Fdflags>;
 
   get rsync(): boolean {
     return (this.value & Fdflags.rsync) > 0;
@@ -1203,7 +1185,7 @@ export class Fdflags extends U16<"fdflags"> {
   // Write according to synchronized I/O file integrity completion. In addition
   // to synchronizing the data stored in the file, the implementation may also
   // synchronously update the file's metadata.
-  static readonly sync = 1 << 4 as Value<Fdflags>;
+  static readonly sync = 1 << 4 as Value<number, Fdflags>;
 
   get sync(): boolean {
     return (this.value & Fdflags.sync) > 0;
@@ -1324,13 +1306,11 @@ export class Lookupflags extends U32<"lookupflags"> {
     ptr: Pointer<Lookupflags>,
     offset: Offset = 0,
   ): Lookupflags {
-    return new Lookupflags(
-      Lookupflags.getValue(mem, ptr, offset) as Value<Lookupflags>,
-    );
+    return new Lookupflags(Lookupflags.getValue(mem, ptr, offset));
   }
 
   // As long as the resolved path corresponds to a symbolic link, it is expanded.
-  static readonly symlink_follow = 1 << 0 as Value<Lookupflags>;
+  static readonly symlink_follow = 1 << 0 as Value<number, Lookupflags>;
 
   get symlink_follow(): boolean {
     return (this.value & Lookupflags.symlink_follow) > 0;
@@ -1368,12 +1348,12 @@ export class Eventtype extends U8<"eventtype"> {
     ptr: Pointer<Eventtype>,
     offset: Offset = 0,
   ): Eventtype {
-    return new Eventtype(this.getValue(mem, ptr, offset) as Value<Eventtype>);
+    return new Eventtype(this.getValue(mem, ptr, offset));
   }
 
   // The time value of clock subscription_clock::id has reached timestamp
   // subscription_clock::timeout.
-  static readonly clock = 0 as Value<Eventtype>;
+  static readonly clock = 0 as Value<number, Eventtype>;
 
   get clock(): boolean {
     return this.value === Eventtype.clock;
@@ -1381,7 +1361,7 @@ export class Eventtype extends U8<"eventtype"> {
 
   // File descriptor subscription_fd_readwrite::file_descriptor has data
   // available for reading. This event always triggers for regular files.
-  static readonly fd_read = 1 as Value<Eventtype>;
+  static readonly fd_read = 1 as Value<number, Eventtype>;
 
   get fd_read(): boolean {
     return this.value === Eventtype.fd_read;
@@ -1389,7 +1369,7 @@ export class Eventtype extends U8<"eventtype"> {
 
   // File descriptor subscription_fd_readwrite::file_descriptor has capacity
   // available for writing. This event always triggers for regular files.
-  static readonly fd_write = 2 as Value<Eventtype>;
+  static readonly fd_write = 2 as Value<number, Eventtype>;
 
   get fd_write(): boolean {
     return this.value === Eventtype.fd_write;
@@ -1402,7 +1382,7 @@ export class Eventrwflags extends U16<"eventrwflags"> {
   readonly __data = "eventrwflags";
 
   static zero(): Eventrwflags {
-    return new Eventrwflags(0 as Value<Eventrwflags>);
+    return new Eventrwflags(0);
   }
 
   static cast(
@@ -1410,13 +1390,11 @@ export class Eventrwflags extends U16<"eventrwflags"> {
     ptr: Pointer<Eventrwflags>,
     offset: Offset = 0,
   ): Eventrwflags {
-    return new Eventrwflags(
-      this.getValue(mem, ptr, offset) as Value<Eventrwflags>,
-    );
+    return new Eventrwflags(this.getValue(mem, ptr, offset));
   }
 
   // peer of this socket has closed or disconnected.
-  static readonly fd_readwrite_hangup = 1 as Value<Eventrwflags>;
+  static readonly fd_readwrite_hangup = 1 as Value<number, Eventrwflags>;
 
   get fd_readwrite_hangup(): boolean {
     return (this.value & Eventrwflags.fd_readwrite_hangup) > 0;
@@ -1499,7 +1477,7 @@ export class Subclockflags extends U16<"subclockflags"> {
   readonly __data = "subclockflags";
 
   static zero(): Subclockflags {
-    return new Subclockflags(0 as Value<Subclockflags>);
+    return new Subclockflags(0);
   }
 
   static cast(
@@ -1507,16 +1485,17 @@ export class Subclockflags extends U16<"subclockflags"> {
     ptr: Pointer<Subclockflags>,
     offset: Offset = 0,
   ): Subclockflags {
-    return new Subclockflags(
-      this.getValue(mem, ptr, offset) as Value<Subclockflags>,
-    );
+    return new Subclockflags(this.getValue(mem, ptr, offset));
   }
 
   // set, treat the timestamp provided in subscription_clock::timeout as an
   // absolute timestamp of clock subscription_clock::id. If clear, treat the
   // timestamp provided in subscription_clock::timeout relative to the current
   // time value of clock subscription_clock::id.
-  static readonly subscription_clock_abstime = 1 << 0 as Value<Subclockflags>;
+  static readonly subscription_clock_abstime = 1 << 0 as Value<
+    number,
+    Subclockflags
+  >;
 
   get subscription_clock_abstime(): boolean {
     return (this.value & Subclockflags.subscription_clock_abstime) > 0;
@@ -1905,34 +1884,32 @@ export class Oflags extends U16<"oflags"> {
   readonly __data = "oflags";
 
   static cast(mem: Memory, ptr: Pointer<Oflags>, offset: Offset = 0): Oflags {
-    return new Oflags(
-      this.getValue(mem, ptr, offset) as Value<Oflags>,
-    );
+    return new Oflags(this.getValue(mem, ptr, offset));
   }
 
   // Create file if it does not exist.
-  static creat = 1 << 0 as Value<Oflags>;
+  static creat = 1 << 0 as Value<number, Oflags>;
 
   get creat(): boolean {
     return (this.value & Oflags.creat) > 0;
   }
 
   // Fail if not a directory.
-  static directory = 1 << 1 as Value<Oflags>;
+  static directory = 1 << 1 as Value<number, Oflags>;
 
   get directory(): boolean {
     return (this.value & Oflags.directory) > 0;
   }
 
   // Fail if file already exists.
-  static excl = 1 << 2 as Value<Oflags>;
+  static excl = 1 << 2 as Value<number, Oflags>;
 
   get excl(): boolean {
     return (this.value & Oflags.excl) > 0;
   }
 
   // Truncate file to size 0.
-  static trunc = 1 << 3 as Value<Oflags>;
+  static trunc = 1 << 3 as Value<number, Oflags>;
 
   get trunc(): boolean {
     return (this.value & Oflags.trunc) > 0;
@@ -2114,40 +2091,22 @@ export class Filestat implements Data<"filestat">, FilestatParams {
   }
 }
 
-export class Preopentype implements Data<"preopentype"> {
+export class Preopentype extends U8<"preopentype"> {
   readonly __data = "preopentype";
 
   static readonly size = 1;
   static readonly alignment = 1;
-
-  constructor(
-    private readonly value: Value<Preopentype>,
-  ) {}
 
   static cast(
     mem: Memory,
     ptr: Pointer<Preopentype>,
     offset: Offset = 0,
   ): Preopentype {
-    const data = new DataView(
-      mem.buffer,
-      addOffset(ptr, offset),
-      Preopentype.size,
-    );
-    return new Preopentype(data.getUint8(0) as Value<Preopentype>);
-  }
-
-  store(
-    mem: Memory,
-    ptr: Pointer<Preopentype>,
-    offset: Offset = 0,
-  ) {
-    const data = new DataView(mem.buffer, addOffset(ptr, offset));
-    data.setUint8(0, this.value);
+    return new Preopentype(this.getValue(mem, ptr, offset));
   }
 
   // A pre-opened directory.
-  static readonly dir = 0 as Value<Preopentype>;
+  static readonly dir = 0 as Value<number, Preopentype>;
 
   dir(): boolean {
     return this.value === Preopentype.dir;
