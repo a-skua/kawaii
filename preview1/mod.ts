@@ -345,10 +345,31 @@ export function fd_pwrite(
 // Read from a file descriptor. Note: This is similar to readv in POSIX.
 export function fd_read(
   fd: Value<number, Fd>,
+  // List of scatter/gather vectors to which to store data.
   iovs: Value<number, Pointer<IovecArray>>,
+  iovs_size: Value<number, Size>,
+  // The number of bytes read.
   result: Value<number, Pointer<Size>>,
 ): Value<number, Errno> {
-  return Errno.nosys;
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
+  }
+
+  let read_size = 0;
+  for (let i = 0; i < iovs_size; i += 1) {
+    const iov = IovecArray.cast(memory, new Pointer(iovs), IovecArray.size * i);
+    const read = state.file.content.blob.subarray(
+      state.read,
+      iov.buf_len.value,
+    );
+    new Uint8Array(memory.buffer, iov.buf.value, iov.buf_len.value).set(read);
+    state.read += read.length;
+    read_size += read.length;
+  }
+
+  new Size(read_size).store(memory, new Pointer(result));
+  return Errno.success;
 }
 
 // fd_fdstat_get(fd: fd) -> Result<fdstat, errno>
@@ -359,12 +380,12 @@ export function fd_fdstat_get(
   fd: Value<number, Fd>,
   result: Value<number, Pointer<Fdstat>>,
 ): Value<number, Errno> {
-  const file = FS.findByFd(new Fd(fd));
-  if (!file) {
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
     return Errno.badf;
   }
 
-  file.wasi_fdstat().store(memory, new Pointer(result));
+  state.file.wasi_fdstat().store(memory, new Pointer(result));
   return Errno.success;
 }
 
@@ -377,12 +398,14 @@ export function fd_fdstat_set_flags(
   // The desired values of the file descriptor flags.
   flags: Value<number, Fdflags>,
 ): Value<number, Errno> {
-  const file = FS.findByFd(new Fd(fd));
-  if (!file) {
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
     return Errno.badf;
   }
 
-  file.wasi_fs_flags = new Fdflags(flags);
+  console.debug("fd_fdstat_set_flags", new Fdflags(flags));
+
+  state.file.wasi_fs_flags = new Fdflags(flags);
   return Errno.success;
 }
 
@@ -429,13 +452,13 @@ export function fd_readdir(
   // read buffer, the end of the directory has been reached.
   result: Value<number, Pointer<Size>>,
 ): Value<number, Errno> {
-  const dir = FS.findByFd(new Fd(fd));
-  if (!dir) {
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
     return Errno.badf;
   }
 
   const offset = new Dircookie(cookie);
-  const children = dir.children.slice(offset.number);
+  const children = state.file.children.slice(offset.number);
   if (!children.length) {
     new Size(0).store(memory, new Pointer(result));
     return Errno.success;
@@ -448,7 +471,7 @@ export function fd_readdir(
   );
 
   const { written } = encoder.encodeInto(
-    child.name.str,
+    child.name.value,
     new Uint8Array(memory.buffer, buf + Dirent.size, buf_len - Dirent.size),
   );
   new Size(Dirent.size + written).store(memory, new Pointer(result));
@@ -460,7 +483,7 @@ export function fd_readdir(
 export function path_filestat_get(
   _fd: Value<number, Fd>,
   // Flags determining the method of how the path is resolved.
-  _flags: Value<number, Lookupflags>,
+  flags: Value<number, Lookupflags>,
   // The path of the file or directory to inspect.
   path_buf: Value<number, Pointer<U8<string>>>,
   path_len: Value<number, Size>,
@@ -470,6 +493,9 @@ export function path_filestat_get(
   const path = decoder.decode(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
+
+  console.debug("path_filestat_get", path);
+  console.debug("path_filestat_get", new Lookupflags(flags));
 
   const file = FS.find(path);
   if (!file) {
@@ -512,12 +538,12 @@ export function path_open(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
 
-  console.debug(path);
-
   const file = FS.find(path);
   if (!file) {
     return Errno.noent;
   }
+
+  console.debug("path_open", path);
 
   FS.open(file).store(memory, new Pointer(result));
   return Errno.success;
@@ -527,12 +553,46 @@ export function path_readlink(): Value<number, Errno> {
   return Errno.nosys;
 }
 
+export function path_remove_directory(): Value<number, Errno> {
+  return Errno.nosys;
+}
+
+export function path_unlink_file(): Value<number, Errno> {
+  return Errno.nosys;
+}
+
+type Keys =
+  | "sched_yield"
+  | "proc_exit"
+  | "args_get"
+  | "args_sizes_get"
+  | "clock_time_get"
+  | "environ_get"
+  | "environ_sizes_get"
+  | "fd_write"
+  | "random_get"
+  | "poll_oneoff"
+  | "fd_close"
+  | "fd_filestat_get"
+  | "fd_pread"
+  | "fd_pwrite"
+  | "fd_read"
+  | "fd_fdstat_get"
+  | "fd_fdstat_set_flags"
+  | "fd_prestat_get"
+  | "fd_prestat_dir_name"
+  | "fd_readdir"
+  | "path_filestat_get"
+  | "path_open"
+  | "path_readlink"
+  | "path_remove_directory"
+  | "path_unlink_file";
+
 type Fn = (
   ...args: Value<number | bigint, Data<string>>[]
 ) => Value<number, Errno> | void;
-export const Module: {
-  [key: string]: Fn;
-} = {
+
+export const Module: Record<Keys, Fn> = {
   sched_yield: sched_yield as Fn,
   proc_exit: proc_exit as Fn,
   args_get: args_get as Fn,
@@ -556,6 +616,8 @@ export const Module: {
   path_filestat_get: path_filestat_get as Fn,
   path_open: path_open as Fn,
   path_readlink: path_readlink as Fn,
+  path_remove_directory: path_remove_directory as Fn,
+  path_unlink_file: path_unlink_file as Fn,
 };
 
 export type Module = typeof Module;

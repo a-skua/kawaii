@@ -7,6 +7,7 @@ import (
 )
 
 func main() {
+	slog.Info("fetch...")
 	resp, err := http.Get("http://example.com")
 	if err != nil {
 		slog.Error(err.Error())

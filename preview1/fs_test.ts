@@ -3,8 +3,10 @@ import {
   closeByFd,
   DeviceId,
   File,
+  FileContent,
   FileId,
   FileName,
+  FileState,
   FileType,
   find,
   findByFd,
@@ -13,6 +15,8 @@ import {
   Value,
 } from "./fs.ts";
 import * as WASI from "./type.ts";
+
+const encoder = new TextEncoder();
 
 Deno.test("DeviceId", async (t) => {
   await t.step("wasi_device()", () => {
@@ -39,7 +43,7 @@ Deno.test("Timestamp", async (t) => {
     assertEquals(
       Timestamp.now().wasi_timestamp(),
       new WASI.Timestamp(
-        BigInt(new Date().getTime()) * 1_000_000n as WASI.BigValue<
+        BigInt(new Date().getTime() * 1_000_000) as WASI.BigValue<
           WASI.Timestamp
         >,
       ),
@@ -291,7 +295,7 @@ Deno.test("File", async (t) => {
       file.wasi_filestat(),
       new WASI.Filestat({
         dev: new WASI.Device(0n),
-        ino: new WASI.Inode(file.id.id),
+        ino: new WASI.Inode(file.id.value),
         filetype: new WASI.Filetype(WASI.Filetype.regular_file),
         nlink: new WASI.Linkcount(0n),
         size: new WASI.Filesize(0n),
@@ -312,10 +316,34 @@ Deno.test("File", async (t) => {
       file.wasi_dirent(new WASI.Dircookie(1n)),
       new WASI.Dirent({
         d_next: new WASI.Dircookie(1n),
-        d_ino: new WASI.Inode(file.id.id),
+        d_ino: new WASI.Inode(file.id.value),
         d_namlen: new WASI.Dirnamlen(4),
         d_type: new WASI.Filetype(WASI.Filetype.regular_file),
       }),
+    );
+  });
+
+  await t.step("fetch()", async () => {
+    const actual = await File.fetch(
+      new FileName("file_test.txt"),
+      "./fs_test/file_fetch.txt",
+    );
+    const expect = new File({
+      name: new FileName("file_test.txt"),
+      type: File.type.regularFile,
+      content: new FileContent("Testing Text File!\n"),
+    });
+    assertEquals(actual.name, expect.name);
+    assertEquals(actual.type, expect.type);
+    assertEquals(actual.content, expect.content);
+  });
+});
+
+Deno.test("FileContent", async (t) => {
+  await t.step("blob", () => {
+    assertEquals(
+      new FileContent("Hello").blob,
+      encoder.encode("Hello"),
     );
   });
 });
@@ -325,8 +353,17 @@ Deno.test("find()", async (t) => {
     assertEquals(find("/"), File.root);
   });
 
-  await t.step("./", () => {
-    assertEquals(find("./"), File.current);
+  await t.step("/", () => {
+    assertEquals(find("/"), File.root);
+  });
+
+  const dir = File.dir("test_find_dir");
+  File.root.append(dir);
+  await t.step("/test_find_dir", () => {
+    assertEquals(find("/test_find_dir"), dir);
+  });
+  await t.step("/test_find_dir/", () => {
+    assertEquals(find("/test_find_dir/"), dir);
   });
 
   await t.step("../", () => {
@@ -346,13 +383,13 @@ Deno.test("findByFd()", async (t) => {
 
   await t.step("undefined fd", () => {
     assertEquals(
-      !!findByFd(WASI.Fd.provide()),
-      false,
+      findByFd(WASI.Fd.provide()),
+      undefined,
     );
   });
 });
 
-Deno.test("close()", async (t) => {
+Deno.test("close()", () => {
   const file = new File({
     name: new FileName("test_file"),
     type: File.type.regularFile,
@@ -361,7 +398,7 @@ Deno.test("close()", async (t) => {
 
   assertEquals(
     findByFd(fd),
-    file,
+    new FileState({ file }),
   );
 
   closeByFd(fd);

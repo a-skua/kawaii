@@ -17,6 +17,7 @@ import {
   Fdstat,
   Filetype,
   Inode,
+  Iovec,
   Pointer,
   Rights,
   Size,
@@ -42,6 +43,7 @@ import init, {
   fd_fdstat_get,
   fd_fdstat_set_flags,
   fd_prestat_get,
+  fd_read,
   fd_readdir,
   fd_write,
   poll_oneoff,
@@ -551,7 +553,7 @@ Deno.test("fd_readdir", async (t) => {
       Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(1n),
-        d_ino: new Inode(dir.children[0].id.id),
+        d_ino: new Inode(dir.children[0].id.value),
         d_namlen: new Dirnamlen(10),
         d_type: new Filetype(Filetype.regular_file),
       }),
@@ -579,7 +581,7 @@ Deno.test("fd_readdir", async (t) => {
       Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(1n),
-        d_ino: new Inode(dir.children[0].id.id),
+        d_ino: new Inode(dir.children[0].id.value),
         d_namlen: new Dirnamlen(10),
         d_type: new Filetype(Filetype.regular_file),
       }),
@@ -607,7 +609,7 @@ Deno.test("fd_readdir", async (t) => {
       Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(2n),
-        d_ino: new Inode(dir.children[1].id.id),
+        d_ino: new Inode(dir.children[1].id.value),
         d_namlen: new Dirnamlen(10),
         d_type: new Filetype(Filetype.regular_file),
       }),
@@ -635,7 +637,7 @@ Deno.test("fd_readdir", async (t) => {
       Dirent.cast(memory, new Pointer(200), 0),
       new Dirent({
         d_next: new Dircookie(3n),
-        d_ino: new Inode(dir.children[2].id.id),
+        d_ino: new Inode(dir.children[2].id.value),
         d_namlen: new Dirnamlen(10),
         d_type: new Filetype(Filetype.regular_file),
       }),
@@ -662,21 +664,65 @@ Deno.test("fd_readdir", async (t) => {
   });
 });
 
-Deno.test("fd_close", () => {
-  const fd = FS.open(
-    new FS.File({
-      name: new FS.FileName("test_file"),
-      type: FS.File.type.regularFile,
-    }),
-  );
+Deno.test("fd_close", async (t) => {
+  await t.step("success", () => {
+    const fd = FS.open(
+      new FS.File({
+        name: new FS.FileName("test_file"),
+        type: FS.File.type.regularFile,
+      }),
+    );
 
-  assertEquals(
-    fd_close(fd.value),
-    Errno.success,
-  );
+    assertEquals(
+      fd_close(fd.value),
+      Errno.success,
+    );
 
-  assertEquals(
-    FS.findByFd(fd),
-    undefined,
-  );
+    assertEquals(
+      FS.findByFd(fd),
+      undefined,
+    );
+  });
+});
+
+Deno.test("fd_read", async (t) => {
+  await t.step("success", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const fd = FS.open(
+      new FS.File({
+        name: new FS.FileName("test_file.txt"),
+        type: FS.File.type.regularFile,
+        content: new FS.FileContent("File Content\n"),
+      }),
+    );
+
+    new Iovec({
+      buf: new Pointer(256),
+      buf_len: new Size(64),
+    }).store(memory, new Pointer(128));
+
+    assertEquals(
+      fd_read(fd.value, toPointer(128), new Size(1).value, toPointer(0)),
+      Errno.success,
+    );
+    assertEquals(
+      Size.cast(memory, new Pointer(0)),
+      new Size(13),
+    );
+    assertEquals(
+      decoder.decode(new Uint8Array(memory.buffer, 256, 13)),
+      "File Content\n",
+    );
+
+    assertEquals(
+      fd_read(fd.value, toPointer(128), new Size(1).value, toPointer(0)),
+      Errno.success,
+    );
+    assertEquals(
+      Size.cast(memory, new Pointer(0)),
+      new Size(0),
+    );
+  });
 });

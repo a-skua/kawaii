@@ -2,48 +2,48 @@ import * as WASI from "./type.ts";
 
 const encoder = new TextEncoder();
 
-interface FS<T extends string> {
+interface Fs<T extends string> {
   __fs: T;
 }
 
-export type Value<T, V extends FS<string>> = T & { __value: V };
+export type Value<T, V extends Fs<string>> = T & { __value: V };
 
-export class DeviceId implements FS<"device_id"> {
-  readonly __fs = "device_id";
+abstract class FsValue<V, T extends string> implements Fs<T> {
+  abstract readonly __fs: T;
+
+  readonly value: Value<V, Fs<T>>;
 
   constructor(
-    readonly id: Value<bigint, DeviceId>,
-  ) {}
+    value: Value<V, Fs<T>> | V,
+  ) {
+    this.value = value as Value<V, Fs<T>>;
+  }
+}
+
+export class DeviceId extends FsValue<bigint, "device_id"> {
+  readonly __fs = "device_id";
 
   wasi_device(): WASI.Device {
     return new WASI.Device(
-      this.id as bigint as WASI.BigValue<WASI.Device>,
+      this.value as bigint as WASI.BigValue<WASI.Device>,
     );
   }
 }
 
 const deviceId = new DeviceId(0n as Value<bigint, DeviceId>);
 
-export class FileId implements FS<"file_id"> {
+export class FileId extends FsValue<bigint, "file_id"> {
   readonly __fs = "file_id";
-
-  constructor(
-    readonly id: Value<bigint, FileId>,
-  ) {}
 
   wasi_inode(): WASI.Inode {
     return new WASI.Inode(
-      this.id as bigint as WASI.BigValue<WASI.Inode>,
+      this.value as bigint as WASI.BigValue<WASI.Inode>,
     );
   }
 }
 
-export class Timestamp implements FS<"timestamp"> {
+export class Timestamp extends FsValue<Date, "timestamp"> {
   readonly __fs = "timestamp";
-
-  constructor(
-    readonly date: Value<Date, Timestamp>,
-  ) {}
 
   static now(): Timestamp {
     return new Timestamp(
@@ -53,42 +53,38 @@ export class Timestamp implements FS<"timestamp"> {
 
   wasi_timestamp(): WASI.Timestamp {
     return new WASI.Timestamp(
-      BigInt(this.date.getTime()) * 1_000_000n as WASI.BigValue<WASI.Timestamp>,
+      BigInt(this.value.getTime() * 1_000_000) as WASI.BigValue<WASI.Timestamp>,
     );
   }
 }
 
-export class FileType implements FS<"file_type"> {
+export class FileType extends FsValue<number, "file_type"> {
   readonly __fs = "file_type";
-
-  constructor(
-    private readonly type: Value<number, FileType>,
-  ) {}
 
   // Directory
   static readonly dir = 1 as Value<number, FileType>;
 
   get dir(): boolean {
-    return this.type === FileType.dir;
+    return this.value === FileType.dir;
   }
 
   // Regular File
   static readonly regularFile = 2 as Value<number, FileType>;
 
   get regularFile(): boolean {
-    return this.type === FileType.regularFile;
+    return this.value === FileType.regularFile;
   }
 
   // Character Device
   static readonly characterDevice = 3 as Value<number, FileType>;
 
   get characterDevice(): boolean {
-    return this.type === FileType.characterDevice;
+    return this.value === FileType.characterDevice;
   }
 
   wasi_filetype(): WASI.Filetype {
     return new WASI.Filetype((() => {
-      switch (this.type) {
+      switch (this.value) {
         case FileType.dir:
           return WASI.Filetype.directory;
         case FileType.regularFile:
@@ -112,16 +108,8 @@ const genFileId = (function* (): Iterator<FileId> {
 })();
 
 // File Name
-export class FileName implements FS<"file_name"> {
+export class FileName extends FsValue<string, "file_name"> {
   readonly __fs = "file_name";
-
-  readonly str: Value<string, FileName>;
-
-  constructor(
-    str: Value<string, FileName> | string,
-  ) {
-    this.str = str as Value<string, FileName>;
-  }
 
   static zero(): FileName {
     return new FileName("");
@@ -132,7 +120,15 @@ export class FileName implements FS<"file_name"> {
   }
 
   get blob(): Uint8Array {
-    return encoder.encode(this.str);
+    return encoder.encode(this.value);
+  }
+}
+
+export class FileContent extends FsValue<string, "file_content"> {
+  readonly __fs = "file_content";
+
+  get blob(): Uint8Array {
+    return encoder.encode(this.value);
   }
 }
 
@@ -140,12 +136,13 @@ type FileParams = {
   readonly name: FileName;
   readonly type: FileType;
   readonly timestamp?: Timestamp;
+  readonly content?: FileContent;
   readonly wasi_fs_flags?: WASI.Fdflags;
   readonly wasi_fs_rights_base?: WASI.Rights;
   readonly wasi_fs_rights_inheriting?: WASI.Rights;
 };
 
-export class File implements FS<"file"> {
+export class File implements Fs<"file"> {
   readonly __fs = "file";
 
   readonly id: FileId = (() => {
@@ -168,10 +165,12 @@ export class File implements FS<"file"> {
 
   get fullName(): string {
     return (this.parent
-      ? `${this.parent.fullName}${this.name.str}`
-      : this.name.str) +
+      ? `${this.parent.fullName}${this.name.value}`
+      : this.name.value) +
       (this.type.dir ? "/" : "");
   }
+
+  readonly content: FileContent;
 
   // Create Timestamp
   private readonly _timestamp: Timestamp;
@@ -189,12 +188,14 @@ export class File implements FS<"file"> {
     name,
     type,
     timestamp = Timestamp.now(),
+    content = new FileContent(""),
     wasi_fs_flags = WASI.Fdflags.zero(),
     wasi_fs_rights_base = WASI.Rights.zero(),
     wasi_fs_rights_inheriting = WASI.Rights.zero(),
   }: FileParams) {
     this.name = name;
     this.type = type;
+    this.content = content;
     this._timestamp = timestamp;
     this._wasi_fs_flags = wasi_fs_flags;
     this._wasi_fs_rights_base = wasi_fs_rights_base;
@@ -202,14 +203,23 @@ export class File implements FS<"file"> {
   }
 
   static async fetch(name: FileName, url: string): Promise<File> {
-    const res = await fetch(new URL(url, import.meta.url));
-    if (!res.ok) {
+    const resp = await fetch(new URL(url, import.meta.url));
+    if (!resp.ok) {
       throw new Error(`Failed to fetch ${url}`);
     }
 
     return new File({
       name: name,
       type: File.type.regularFile,
+      content: new FileContent(await resp.text()),
+    });
+  }
+
+  // New Directory
+  static dir(name: string): File {
+    return new File({
+      name: new FileName(name),
+      type: File.type.dir,
     });
   }
 
@@ -254,20 +264,31 @@ export class File implements FS<"file"> {
       case "":
         return root.find(path.slice(1));
       case ".":
+        // CASE: "./"
+        if (path.slice(1)[0] === "") {
+          return this;
+        }
         return this.find(path.slice(1));
       case "..":
         return current.parent?.find(path.slice(1));
       case undefined:
         return this;
-      default:
-        return this._children.find(
-          (file) => file.name.str === path[0],
-        )?.find(
+      default: {
+        const child = this._children.find(
+          (file) => file.name.value === path[0],
+        );
+        // CASE: "./dev/"
+        if (path.slice(1)[0] === "") {
+          return child;
+        }
+        return child?.find(
           path.slice(1),
         );
+      }
     }
   }
 
+  // Usage Debug
   tree(): string {
     return [
       this.fullName,
@@ -327,44 +348,60 @@ const stderr = new File({
   wasi_fs_rights_inheriting: new WASI.Rights(WASI.Rights.fd_write),
 });
 
-const root = new File({
-  name: FileName.zero(),
-  type: new FileType(FileType.dir),
-}).append(
-  new File({
-    name: new FileName("dev"),
-    type: new FileType(FileType.dir),
-  }).append(stdin, stdout, stderr),
-  new File({
-    name: new FileName("etc"),
-    type: new FileType(FileType.dir),
-  }).append(
+const root = File.dir("").append(
+  File.dir("dev").append(stdin, stdout, stderr),
+  File.dir("etc").append(
     await File.fetch(new FileName("hosts"), "/etc/hosts"),
     await File.fetch(new FileName("resolv.conf"), "/etc/resolv.conf"),
   ),
+  File.dir("home").append(
+    File.dir("kawaii"),
+  ),
 );
 
-let current = root;
+type FileStateParams = {
+  readonly file: File;
+  readonly read?: number;
+};
+
+export class FileState implements Fs<"file_state"> {
+  readonly __fs = "file_state";
+
+  readonly file: File;
+
+  // Read Offset
+  public read: number;
+
+  constructor({
+    file,
+    read = 0,
+  }: FileStateParams) {
+    this.file = file;
+    this.read = read;
+  }
+}
+
+let current = root.find("/home/kawaii")!;
 
 export const find = (path: string): File | undefined => {
   return current.find(path);
 };
 
 // TODO
-const openMap = new Map<WASI.Value<number, WASI.Fd>, File>([
-  [WASI.Fd.stdin, stdin],
-  [WASI.Fd.stdout, stdout],
-  [WASI.Fd.stderr, stderr],
+const openMap = new Map<WASI.Value<number, WASI.Fd>, FileState>([
+  [WASI.Fd.stdin, new FileState({ file: stdin })],
+  [WASI.Fd.stdout, new FileState({ file: stdout })],
+  [WASI.Fd.stderr, new FileState({ file: stderr })],
 ]);
 
 // File Open
 export const open = (file: File): WASI.Fd => {
   const fd = WASI.Fd.provide();
-  openMap.set(fd.value, file);
+  openMap.set(fd.value, new FileState({ file }));
   return fd;
 };
 
-export const findByFd = (fd: WASI.Fd): File | undefined => {
+export const findByFd = (fd: WASI.Fd): FileState | undefined => {
   return openMap.get(fd.value);
 };
 

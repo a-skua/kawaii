@@ -27,11 +27,11 @@
 - [ ] `path_create_directory`
 - [x] `path_filestat_get`
 - [ ] `path_filestat_set_times`
-- [ ] `path_readlink`
-- [ ] `path_remove_directory`
+- [x] `path_readlink`
+- [x] `path_remove_directory`
 - [ ] `path_rename`
 - [ ] `path_symlink`
-- [ ] `path_unlink_file`
+- [x] `path_unlink_file`
 - [x] `path_open`
 - [ ] `random_get`
 - [x] `fd_fdstat_get`
