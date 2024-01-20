@@ -1,4 +1,4 @@
-import { assertEquals } from "assert";
+import { assert, assertEquals } from "assert";
 import {
   BigValue,
   Ciovec,
@@ -1152,10 +1152,7 @@ Deno.test("fd", async (t) => {
   });
 
   await t.step("provide()", () => {
-    assertEquals(
-      !!Fd.provide(),
-      true,
-    );
+    assert(0 < Fd.provide().value);
   });
 });
 

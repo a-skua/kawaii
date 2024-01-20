@@ -235,6 +235,10 @@ export class File implements Fs<"file"> {
     return root;
   }
 
+  static get home(): File {
+    return home;
+  }
+
   static get current(): File {
     return current;
   }
@@ -261,7 +265,7 @@ export class File implements Fs<"file"> {
     }
 
     switch (path[0]) {
-      case "":
+      case "": // TODO deprecate
         return root.find(path.slice(1));
       case ".":
         // CASE: "./"
@@ -269,7 +273,7 @@ export class File implements Fs<"file"> {
           return this;
         }
         return this.find(path.slice(1));
-      case "..":
+      case "..": // TODO deprecate
         return current.parent?.find(path.slice(1));
       case undefined:
         return this;
@@ -381,7 +385,9 @@ export class FileState implements Fs<"file_state"> {
   }
 }
 
-let current = root.find("/home/kawaii")!;
+const home = root.find("/home/kawaii")!;
+
+let current = home; // TODO
 
 export const find = (path: string): File | undefined => {
   return current.find(path);
@@ -392,6 +398,8 @@ const openMap = new Map<WASI.Value<number, WASI.Fd>, FileState>([
   [WASI.Fd.stdin, new FileState({ file: stdin })],
   [WASI.Fd.stdout, new FileState({ file: stdout })],
   [WASI.Fd.stderr, new FileState({ file: stderr })],
+  [WASI.Fd.home, new FileState({ file: home })],
+  [WASI.Fd.root as WASI.Value<number, WASI.Fd>, new FileState({ file: root })],
 ]);
 
 // File Open

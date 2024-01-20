@@ -20,7 +20,9 @@ import {
   Lookupflags,
   Oflags,
   Pointer,
+  Preopentype,
   Prestat,
+  PrestatDir,
   Rights,
   Size,
   Subscription,
@@ -403,9 +405,7 @@ export function fd_fdstat_set_flags(
     return Errno.badf;
   }
 
-  console.debug("fd_fdstat_set_flags", new Fdflags(flags));
-
-  state.file.wasi_fs_flags = new Fdflags(flags);
+  state.file.wasi_fs_flags = new Fdflags(flags); // FIXME
   return Errno.success;
 }
 
@@ -413,10 +413,22 @@ export function fd_fdstat_set_flags(
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_get(
-  _fd: Value<number, Fd>,
-  _result: Value<number, Pointer<Prestat>>,
+  fd: Value<number, Fd>,
+  // The buffer where the description is stored.
+  result: Value<number, Pointer<Prestat>>,
 ): Value<number, Errno> {
-  return Errno.badf;
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
+  }
+
+  new Prestat({
+    type: new Preopentype(Preopentype.dir),
+    content: new PrestatDir({
+      pr_name_len: new Size(state.file.fullName.length), // TODO
+    }),
+  }).store(memory, new Pointer(result));
+  return Errno.success;
 }
 
 // fd_prestat_dir_name(fd: fd, path: Pointer<u8>, path_len: size) ->
@@ -424,11 +436,20 @@ export function fd_prestat_get(
 //
 // Return a description of the given preopened file descriptor.
 export function fd_prestat_dir_name(
-  _fd: Value<number, Fd>,
-  _path: Value<number, Pointer<U8<string>>>,
-  _path_len: Value<number, Size>,
+  fd: Value<number, Fd>,
+  path: Value<number, Pointer<U8<string>>>,
+  path_len: Value<number, Size>,
 ): Value<number, Errno> {
-  return Errno.nosys;
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
+  }
+
+  encoder.encodeInto(
+    state.file.fullName,
+    new Uint8Array(memory.buffer, path, path_len),
+  );
+  return Errno.success;
 }
 
 // fd_readdir(fd: fd, buf: Pointer<u8>, buf_len: size, cookie: dircookie) ->
@@ -481,9 +502,9 @@ export function fd_readdir(
 // Return the attributes of a file or directory. Note: This is similar to `stat`
 // in POSIX.
 export function path_filestat_get(
-  _fd: Value<number, Fd>,
+  fd: Value<number, Fd>,
   // Flags determining the method of how the path is resolved.
-  flags: Value<number, Lookupflags>,
+  _flags: Value<number, Lookupflags>,
   // The path of the file or directory to inspect.
   path_buf: Value<number, Pointer<U8<string>>>,
   path_len: Value<number, Size>,
@@ -494,10 +515,12 @@ export function path_filestat_get(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
 
-  console.debug("path_filestat_get", path);
-  console.debug("path_filestat_get", new Lookupflags(flags));
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
+  }
 
-  const file = FS.find(path);
+  const file = state.file.find(path);
   if (!file) {
     return Errno.noent;
   }
@@ -513,7 +536,7 @@ export function path_filestat_get(
 // descriptor is guaranteed to be less than 2**31. Note: This is similar to
 // `openat` in POSIX.
 export function path_open(
-  _fd: Value<number, Fd>,
+  fd: Value<number, Fd>,
   // Flags determining the method of how the path is resolved.
   _dirflags: Value<number, Lookupflags>,
   // The relative path of the file or directory to open, relative to the
@@ -538,12 +561,15 @@ export function path_open(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
 
-  const file = FS.find(path);
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
+  }
+
+  const file = state.file.find(path);
   if (!file) {
     return Errno.noent;
   }
-
-  console.debug("path_open", path);
 
   FS.open(file).store(memory, new Pointer(result));
   return Errno.success;

@@ -134,11 +134,20 @@ Deno.test("FileName", async (t) => {
 });
 
 Deno.test("File", async (t) => {
-  await t.step("fullName", () => {
-    assertEquals(
-      File.root.fullName,
-      "/",
-    );
+  await t.step("fullName", async (t) => {
+    await t.step("root", () => {
+      assertEquals(
+        File.root.fullName,
+        "/",
+      );
+    });
+
+    await t.step("home", () => {
+      assertEquals(
+        File.home.fullName,
+        "/home/kawaii/",
+      );
+    });
   });
 
   await t.step("type", async (t) => {

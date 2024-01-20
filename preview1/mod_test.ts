@@ -15,10 +15,14 @@ import {
   Fd,
   Fdflags,
   Fdstat,
+  Filestat,
   Filetype,
   Inode,
   Iovec,
   Pointer,
+  Preopentype,
+  Prestat,
+  PrestatDir,
   Rights,
   Size,
   Subclockflags,
@@ -42,10 +46,13 @@ import init, {
   fd_close,
   fd_fdstat_get,
   fd_fdstat_set_flags,
+  fd_prestat_dir_name,
   fd_prestat_get,
   fd_read,
   fd_readdir,
   fd_write,
+  path_filestat_get,
+  path_open,
   poll_oneoff,
   proc_exit,
   random_get,
@@ -53,6 +60,7 @@ import init, {
 } from "./mod.ts";
 
 const decoder = new TextDecoder();
+const encoder = new TextEncoder();
 
 const toBigValue = <T extends Data<string>>(v: bigint): BigValue<T> =>
   v as BigValue<T>;
@@ -438,10 +446,53 @@ Deno.test("fd_fdstat_get", async (t) => {
     );
   });
 
-  await t.step("undefined", () => {
+  await t.step("home", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
     const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
     assertEquals(
-      fd_fdstat_get(toValue(3), toPointer(pointer.value)),
+      fd_fdstat_get(Fd.home, toPointer(pointer.value)),
+      Errno.success,
+    );
+    assertEquals(
+      Fdstat.cast(memory, pointer),
+      new Fdstat({
+        fs_filetype: new Filetype(Filetype.directory),
+        fs_flags: Fdflags.zero(),
+        fs_rights_base: Rights.zero(),
+        fs_rights_inheriting: Rights.zero(),
+      }),
+    );
+  });
+
+  await t.step("root", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
+    assertEquals(
+      fd_fdstat_get(Fd.root, toPointer(pointer.value)),
+      Errno.success,
+    );
+    assertEquals(
+      Fdstat.cast(memory, pointer),
+      new Fdstat({
+        fs_filetype: new Filetype(Filetype.directory),
+        fs_flags: Fdflags.zero(),
+        fs_rights_base: Rights.zero(),
+        fs_rights_inheriting: Rights.zero(),
+      }),
+    );
+  });
+
+  await t.step("undefined", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const pointer: Pointer<Fdstat> = randomPointer(Fdstat);
+    assertEquals(
+      fd_fdstat_get(toValue(5), toPointer(pointer.value)),
       Errno.badf,
     );
   });
@@ -477,19 +528,78 @@ Deno.test("fd_fdstat_set_flags", async (t) => {
       Errno.success,
     );
   });
+
+  await t.step("home", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      fd_fdstat_set_flags(Fd.home, Fdflags.nonblock),
+      Errno.success,
+    );
+  });
+
+  await t.step("root", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      fd_fdstat_set_flags(Fd.root, Fdflags.nonblock),
+      Errno.success,
+    );
+  });
+
   await t.step("undefined", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     init({ memory });
 
     assertEquals(
-      fd_fdstat_set_flags(toValue(3), Fdflags.nonblock),
+      fd_fdstat_set_flags(toValue(5), Fdflags.nonblock),
       Errno.badf,
     );
   });
 });
 
-Deno.test("fd_prestat_get", () => {
-  assertEquals(fd_prestat_get(toValue(0), toPointer(0)), Errno.badf);
+Deno.test("fd_prestat_get", async (t) => {
+  await t.step("home", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Prestat);
+    init({ memory });
+
+    assertEquals(
+      fd_prestat_get(Fd.home, toPointer(pointer.value)),
+      Errno.success,
+    );
+    assertEquals(
+      Prestat.cast(memory, pointer),
+      new Prestat({
+        type: new Preopentype(Preopentype.dir),
+        content: new PrestatDir({
+          pr_name_len: new Size("/home/kawaii/".length),
+        }),
+      }),
+    );
+  });
+
+  await t.step("root", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    const pointer = randomPointer(Prestat);
+    init({ memory });
+
+    assertEquals(
+      fd_prestat_get(Fd.root, toPointer(pointer.value)),
+      Errno.success,
+    );
+    assertEquals(
+      Prestat.cast(memory, pointer),
+      new Prestat({
+        type: new Preopentype(Preopentype.dir),
+        content: new PrestatDir({
+          pr_name_len: new Size("/".length),
+        }),
+      }),
+    );
+  });
 });
 
 Deno.test("fd_readdir", async (t) => {
@@ -500,7 +610,7 @@ Deno.test("fd_readdir", async (t) => {
 
     assertEquals(
       fd_readdir(
-        toValue(4),
+        toValue(5),
         toPointer(pointer.value),
         toValue(100),
         toBigValue(0n),
@@ -724,5 +834,84 @@ Deno.test("fd_read", async (t) => {
       Size.cast(memory, new Pointer(0)),
       new Size(0),
     );
+  });
+});
+
+Deno.test("path_filestat_get", async (t) => {
+  await t.step("fd=root(/), path=home", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    encoder.encodeInto("home", new Uint8Array(memory.buffer, 64, 4));
+
+    assertEquals(
+      path_filestat_get(
+        Fd.root,
+        toValue(0),
+        toPointer(64),
+        new Size(4).value,
+        toPointer(128),
+      ),
+      Errno.success,
+    );
+    assertEquals(
+      Filestat.cast(memory, new Pointer(128)),
+      FS.find("/home")!.wasi_filestat(),
+    );
+  });
+});
+
+Deno.test("fd_prestat_dir_name", async (t) => {
+  await t.step("home", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    assertEquals(
+      fd_prestat_dir_name(
+        Fd.home,
+        toValue(64),
+        new Size("/home/kawaii/".length).value,
+      ),
+      Errno.success,
+    );
+    assertEquals(
+      decoder.decode(new Uint8Array(memory.buffer, 64, "/home/kawaii/".length)),
+      "/home/kawaii/",
+    );
+  });
+});
+
+Deno.test("path_open", async (t) => {
+  await t.step("fd=root(/), path=(/home/kawaii)", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    encoder.encodeInto(
+      "/home/kawaii",
+      new Uint8Array(memory.buffer, 64, "/home/kawaii".length),
+    );
+
+    assertEquals(
+      path_open(
+        Fd.root,
+        toValue(0),
+        toPointer(64),
+        toValue("/home/kawaii".length),
+        toValue(0),
+        toBigValue(0n),
+        toBigValue(0n),
+        toValue(0),
+        toPointer(128),
+      ),
+      Errno.success,
+    );
+
+    console.debug(Fd.cast(memory, new Pointer(128)));
+
+    assertEquals(
+      FS.findByFd(Fd.cast(memory, new Pointer(128))),
+      new FS.FileState({ file: FS.File.home }),
+    );
+    FS.closeByFd(Fd.cast(memory, new Pointer(128)));
   });
 });

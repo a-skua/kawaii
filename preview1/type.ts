@@ -221,7 +221,7 @@ export class Timestamp extends U64<"timestamp"> {
 
   static monotonic(): Timestamp {
     return new Timestamp(
-      BigInt(performance.now() * 1_000_000) as BigValue<Timestamp>,
+      BigInt(Math.floor(performance.now() * 1_000_000)) as BigValue<Timestamp>,
     );
   }
 
@@ -790,17 +790,23 @@ export class Fd extends U32<"fd"> {
   static readonly stdout = 1 as Value<number, Fd>;
   static readonly stderr = 2 as Value<number, Fd>;
 
+  // TODO
+  static readonly home = 3 as Value<number, Fd>;
+  static readonly root = 4 as Value<number, Fd>;
+
   // Provide Fd.
   // See: path_open()
   private static readonly provided = new Set<Value<number, Fd>>([
-    Fd.stdin,
-    Fd.stdout,
-    Fd.stderr,
+    this.stdin,
+    this.stdout,
+    this.stderr,
+    this.home,
+    this.root,
   ]);
 
   static provide(): Fd {
     while (true) {
-      const fd = Math.floor(Math.random() * (1 << 31)) as Value<number, Fd>;
+      const fd = (Math.random() * (1 << 31)) >>> 0 as Value<number, Fd>;
       if (Fd.provided.has(fd)) {
         continue;
       }
@@ -2118,7 +2124,7 @@ interface PrestatDirParams {
 }
 
 // The contents of a $prestat when type is `preopentype::dir`.
-export class PrestatDir implements Data<"prestat_dir">, PrestatDirParams {
+export class PrestatDir implements Data<"prestat_dir"> {
   readonly __data = "prestat_dir";
 
   static readonly size = 4;
