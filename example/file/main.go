@@ -11,7 +11,13 @@ func main() {
 		slog.Error(err.Error())
 		return
 	}
-	defer os.Remove(f.Name())
+	defer func() {
+		err := os.Remove(f.Name())
+		if err != nil {
+			slog.Error(err.Error())
+			return
+		}
+	}()
 
 	slog.Info("Created temp file: " + f.Name())
 	if _, err := f.Write([]byte("Example Content")); err != nil {

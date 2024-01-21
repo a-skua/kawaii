@@ -207,6 +207,33 @@ Deno.test("File", async (t) => {
     );
   });
 
+  await t.step("remove()", () => {
+    const file1 = new File({
+      name: new FileName("file1.txt"),
+      type: File.type.regularFile,
+    });
+    const file2 = new File({
+      name: new FileName("file2.txt"),
+      type: File.type.regularFile,
+    });
+    const file3 = new File({
+      name: new FileName("file3.txt"),
+      type: File.type.regularFile,
+    });
+    const dir = File.dir("test_dir").append(file1, file2, file3);
+
+    assertEquals(
+      dir.children,
+      [file1, file2, file3],
+    );
+
+    dir.remove(file2);
+    assertEquals(
+      dir.children,
+      [file1, file3],
+    );
+  });
+
   await t.step("tree()", () => {
     const file = (new File({
       name: new FileName("tree_test_dir"),
@@ -376,6 +403,7 @@ Deno.test("FileState", async (t) => {
           name: new FileName("test_file.txt"),
           type: File.type.regularFile,
         }),
+        wasi_fdflags: WASI.Fdflags.zero(),
       });
 
       state.write("Hello");
@@ -420,6 +448,7 @@ Deno.test("FileState", async (t) => {
         name: new FileName("test_file.txt"),
         type: File.type.regularFile,
       }),
+      WASI.Fdflags.zero(),
     ))!;
 
     const actual: [string, string][] = [];
@@ -481,11 +510,12 @@ Deno.test("close()", () => {
     name: new FileName("test_file"),
     type: File.type.regularFile,
   });
-  const fd = open(file);
+  const wasi_fdflags = WASI.Fdflags.zero();
+  const fd = open(file, wasi_fdflags);
 
   assertEquals(
     findByFd(fd),
-    new FileState({ file }),
+    new FileState({ file, wasi_fdflags }),
   );
 
   closeByFd(fd);

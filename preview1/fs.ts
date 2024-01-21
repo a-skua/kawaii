@@ -263,12 +263,25 @@ export class File implements Fs<"file"> {
     return this._children.slice();
   }
 
+  // Append Children and Return Self
   append(...children: File[]): File {
     for (const child of children) {
       this._children.push(child);
       child._parent = this;
     }
     return this;
+  }
+
+  // Remove Children
+  remove(...children: File[]): void {
+    children.forEach((child) => {
+      const index = this._children.indexOf(child);
+      if (index < 0) {
+        return;
+      }
+
+      this._children.splice(index, 1);
+    });
   }
 
   find(path: string | string[]): File | undefined {
@@ -377,8 +390,8 @@ const root = File.dir("").append(
 
 type FileStateParams = {
   readonly file: File;
+  readonly wasi_fdflags: WASI.Fdflags;
   readonly read?: number;
-  readonly wasi_fdflags?: WASI.Fdflags;
 };
 
 export class FileState implements Fs<"file_state"> {
@@ -394,11 +407,11 @@ export class FileState implements Fs<"file_state"> {
   constructor({
     file,
     read = 0,
-    wasi_fdflags = WASI.Fdflags.zero(),
+    wasi_fdflags,
   }: FileStateParams) {
     this.file = file;
-    this.read = read;
     this._wasi_fdflags = wasi_fdflags;
+    this.read = read;
   }
 
   write(msg: string): void {
@@ -423,23 +436,36 @@ export const find = (path: string): File | undefined => {
 
 // TODO
 const openMap = new Map<WASI.Value<number, WASI.Fd>, FileState>([
-  [WASI.Fd.stdin, new FileState({ file: stdin })],
-  [WASI.Fd.stdout, new FileState({ file: stdout })],
-  [WASI.Fd.stderr, new FileState({ file: stderr })],
-  [WASI.Fd.home, new FileState({ file: home })],
-  [WASI.Fd.root as WASI.Value<number, WASI.Fd>, new FileState({ file: root })],
+  [
+    WASI.Fd.stdin,
+    new FileState({ file: stdin, wasi_fdflags: WASI.Fdflags.zero() }),
+  ],
+  [
+    WASI.Fd.stdout,
+    new FileState({ file: stdout, wasi_fdflags: WASI.Fdflags.zero() }),
+  ],
+  [
+    WASI.Fd.stderr,
+    new FileState({ file: stderr, wasi_fdflags: WASI.Fdflags.zero() }),
+  ],
+  [
+    WASI.Fd.home,
+    new FileState({ file: home, wasi_fdflags: WASI.Fdflags.zero() }),
+  ],
+  [
+    WASI.Fd.root as WASI.Value<number, WASI.Fd>,
+    new FileState({ file: root, wasi_fdflags: WASI.Fdflags.zero() }),
+  ],
 ]);
 
 // File Open
-export const open = (file: File): WASI.Fd => {
+export const open = (file: File, wasi_fdflags: WASI.Fdflags): WASI.Fd => {
   const fd = WASI.Fd.provide();
-  console.debug("open", fd);
-  openMap.set(fd.value, new FileState({ file }));
+  openMap.set(fd.value, new FileState({ file, wasi_fdflags }));
   return fd;
 };
 
 export const findByFd = (fd: WASI.Fd): FileState | undefined => {
-  console.debug("findByFd", fd);
   return openMap.get(fd.value);
 };
 

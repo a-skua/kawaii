@@ -563,11 +563,10 @@ export function path_open(
   }
 
   const fdFlags = new Fdflags(fdflags);
-  console.debug(fdFlags);
 
   const file = state.file.find(path);
   const flags = new Oflags(oflags);
-  console.debug("path_open", `${flags}`);
+  console.debug("path_open", path, `${flags}`);
 
   if (!file && flags.creat) {
     const file = new FS.File({
@@ -575,7 +574,7 @@ export function path_open(
       type: FS.File.type.regularFile,
     });
     state.file.append(file);
-    FS.open(file).store(memory, new Pointer(result));
+    FS.open(file, fdFlags).store(memory, new Pointer(result));
     return Errno.success;
   }
 
@@ -587,7 +586,7 @@ export function path_open(
     return Errno.exist;
   }
 
-  FS.open(file).store(memory, new Pointer(result));
+  FS.open(file, fdFlags).store(memory, new Pointer(result));
   return Errno.success;
 }
 
@@ -599,8 +598,34 @@ export function path_remove_directory(): Value<number, Errno> {
   return Errno.nosys;
 }
 
-export function path_unlink_file(): Value<number, Errno> {
-  return Errno.nosys;
+// Unlink a file. Return errno::isdir if the path refers to a directory. Note:
+// This is similar to `unlinkat(fd, path, 0)` in POSIX.
+export function path_unlink_file(
+  fd: Value<number, Fd>,
+  // The path to a file to unlink.
+  path_buf: Value<number, Pointer<U8<string>>>,
+  path_len: Value<number, Size>,
+): Value<number, Errno> {
+  const path = decoder.decode(
+    new Uint8Array(memory.buffer, path_buf, path_len),
+  );
+
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
+  }
+
+  const file = state.file.find(path);
+  if (!file) {
+    return Errno.noent;
+  }
+
+  if (file.type.dir) {
+    return Errno.isdir;
+  }
+
+  state.file.remove(file);
+  return Errno.success;
 }
 
 type Keys =

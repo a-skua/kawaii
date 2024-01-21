@@ -5,5 +5,6 @@
 make
 
 # run
-deno run --allow-read run.ts example.wasm -h
+deno run --allow-read run.ts walkdir.wasm ..
+# or make example
 ```

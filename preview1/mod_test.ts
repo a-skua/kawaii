@@ -645,7 +645,7 @@ Deno.test("fd_readdir", async (t) => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     init({ memory });
 
-    const fd = FS.open(dir);
+    const fd = FS.open(dir, Fdflags.zero());
 
     assertEquals(
       fd_readdir(
@@ -784,6 +784,7 @@ Deno.test("fd_close", async (t) => {
         name: new FS.FileName("test_file"),
         type: FS.File.type.regularFile,
       }),
+      Fdflags.zero(),
     );
 
     assertEquals(
@@ -809,6 +810,7 @@ Deno.test("fd_read", async (t) => {
         type: FS.File.type.regularFile,
         content: new FS.FileContent("File Content\n"),
       }),
+      Fdflags.zero(),
     );
 
     new Iovec({
@@ -913,7 +915,7 @@ Deno.test("path_open", async (t) => {
 
     assertEquals(
       FS.findByFd(Fd.cast(memory, new Pointer(128))),
-      new FS.FileState({ file: FS.File.home }),
+      new FS.FileState({ file: FS.File.home, wasi_fdflags: Fdflags.zero() }),
     );
     FS.closeByFd(Fd.cast(memory, new Pointer(128)));
   });
@@ -967,6 +969,7 @@ Deno.test("path_open", async (t) => {
       FS.findByFd(fd),
       new FS.FileState({
         file: FS.find(`/home/kawaii/${filename}`)!,
+        wasi_fdflags: Fdflags.zero(),
       }),
     );
     FS.closeByFd(fd);
