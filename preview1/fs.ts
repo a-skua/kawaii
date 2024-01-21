@@ -380,8 +380,8 @@ const stderr = new File({
 const root = File.dir("").append(
   File.dir("dev").append(stdin, stdout, stderr),
   File.dir("etc").append(
-    await File.fetch(new FileName("hosts"), "/etc/hosts"),
-    await File.fetch(new FileName("resolv.conf"), "/etc/resolv.conf"),
+    // await File.fetch(new FileName("hosts"), "/etc/hosts"),
+    // await File.fetch(new FileName("resolv.conf"), "/etc/resolv.conf"),
   ),
   File.dir("home").append(
     File.dir("kawaii"),
