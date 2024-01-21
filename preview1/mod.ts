@@ -628,6 +628,14 @@ export function path_unlink_file(
   return Errno.success;
 }
 
+export function sock_accept(): Value<number, Errno> {
+  return Errno.nosys;
+}
+
+export function sock_shutdown(): Value<number, Errno> {
+  return Errno.nosys;
+}
+
 type Keys =
   | "sched_yield"
   | "proc_exit"
@@ -653,7 +661,9 @@ type Keys =
   | "path_open"
   | "path_readlink"
   | "path_remove_directory"
-  | "path_unlink_file";
+  | "path_unlink_file"
+  | "sock_accept"
+  | "sock_shutdown";
 
 type Fn = (
   ...args: Value<number | bigint, Data<string>>[]
@@ -685,6 +695,8 @@ export const Module: Record<Keys, Fn> = {
   path_readlink: path_readlink as Fn,
   path_remove_directory: path_remove_directory as Fn,
   path_unlink_file: path_unlink_file as Fn,
+  sock_accept: sock_accept as Fn,
+  sock_shutdown: sock_shutdown as Fn,
 };
 
 export type Module = typeof Module;
