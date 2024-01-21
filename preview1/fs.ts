@@ -130,6 +130,10 @@ export class FileContent extends FsValue<string, "file_content"> {
   get blob(): Uint8Array {
     return encoder.encode(this.value);
   }
+
+  toString(): string {
+    return this.value;
+  }
 }
 
 type FileParams = {
@@ -170,7 +174,15 @@ export class File implements Fs<"file"> {
       (this.type.dir ? "/" : "");
   }
 
-  readonly content: FileContent;
+  private _content: FileContent;
+
+  get content(): FileContent {
+    return this._content;
+  }
+
+  set content(content: string) {
+    this._content = new FileContent(content);
+  }
 
   // Create Timestamp
   private readonly _timestamp: Timestamp;
@@ -195,7 +207,7 @@ export class File implements Fs<"file"> {
   }: FileParams) {
     this.name = name;
     this.type = type;
-    this.content = content;
+    this._content = content;
     this._timestamp = timestamp;
     this._wasi_fs_flags = wasi_fs_flags;
     this._wasi_fs_rights_base = wasi_fs_rights_base;
@@ -366,6 +378,7 @@ const root = File.dir("").append(
 type FileStateParams = {
   readonly file: File;
   readonly read?: number;
+  readonly wasi_fdflags?: WASI.Fdflags;
 };
 
 export class FileState implements Fs<"file_state"> {
@@ -373,16 +386,31 @@ export class FileState implements Fs<"file_state"> {
 
   readonly file: File;
 
+  private readonly _wasi_fdflags: WASI.Fdflags;
+
   // Read Offset
   public read: number;
 
   constructor({
     file,
     read = 0,
+    wasi_fdflags = WASI.Fdflags.zero(),
   }: FileStateParams) {
     this.file = file;
     this.read = read;
+    this._wasi_fdflags = wasi_fdflags;
   }
+
+  write(msg: string): void {
+    if (this._wasi_fdflags.append) {
+      this.file.content += msg;
+    } else {
+      this.file.content = msg;
+    }
+    this.hooks.forEach((hook) => hook("write", msg));
+  }
+
+  readonly hooks: ((event: "write", msg: string) => void)[] = [];
 }
 
 const home = root.find("/home/kawaii")!;
@@ -405,11 +433,13 @@ const openMap = new Map<WASI.Value<number, WASI.Fd>, FileState>([
 // File Open
 export const open = (file: File): WASI.Fd => {
   const fd = WASI.Fd.provide();
+  console.debug("open", fd);
   openMap.set(fd.value, new FileState({ file }));
   return fd;
 };
 
 export const findByFd = (fd: WASI.Fd): FileState | undefined => {
+  console.debug("findByFd", fd);
   return openMap.get(fd.value);
 };
 

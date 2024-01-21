@@ -1,4 +1,6 @@
 import * as FS from "./fs.ts";
+export * as FS from "./fs.ts";
+
 import {
   BigValue,
   Ciovec,
@@ -30,12 +32,11 @@ import {
   U8,
   Value,
 } from "./type.ts";
+export * as Type from "./type.ts";
 
 let memory: WebAssembly.Memory;
 let args: Arg[];
 let envs: Env[];
-let stdout: (str: string) => void;
-let stderr: (str: string) => void;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -208,17 +209,12 @@ export function fd_write(
     len += iov.buf_len.value;
   }
 
-  switch (fd) {
-    case Fd.stdout:
-      stdout(str);
-      break;
-    case Fd.stderr:
-      stderr(str);
-      break;
-    default:
-      return Errno.badf;
+  const state = FS.findByFd(new Fd(fd));
+  if (!state) {
+    return Errno.badf;
   }
 
+  state.write(str);
   (new Size(len)).store(memory, new Pointer(result));
 
   return Errno.success;
@@ -544,7 +540,7 @@ export function path_open(
   path_buf: Value<number, Pointer<U8<string>>>,
   path_len: Value<number, Size>,
   // The method by which to open the file.
-  _oflags: Value<number, Oflags>,
+  oflags: Value<number, Oflags>,
   // The initial rights of the newly created file descriptor. The implementation
   // is allowed to return a file descriptor with fewer rights than specified, if
   // and only if those rights do not apply to the type of file being opened. The
@@ -553,7 +549,7 @@ export function path_open(
   // file descriptors derived from it.
   _fs_rights_base: BigValue<Rights>,
   _fs_rights_inheriting: BigValue<Rights>,
-  _fdflags: Value<number, Fdflags>,
+  fdflags: Value<number, Fdflags>,
   // The file descriptor of the file that has been opened.
   result: Value<number, Pointer<Fd>>,
 ): Value<number, Errno> {
@@ -566,9 +562,29 @@ export function path_open(
     return Errno.badf;
   }
 
+  const fdFlags = new Fdflags(fdflags);
+  console.debug(fdFlags);
+
   const file = state.file.find(path);
+  const flags = new Oflags(oflags);
+  console.debug("path_open", `${flags}`);
+
+  if (!file && flags.creat) {
+    const file = new FS.File({
+      name: new FS.FileName(path),
+      type: FS.File.type.regularFile,
+    });
+    state.file.append(file);
+    FS.open(file).store(memory, new Pointer(result));
+    return Errno.success;
+  }
+
   if (!file) {
     return Errno.noent;
+  }
+
+  if (file && flags.excl) {
+    return Errno.exist;
   }
 
   FS.open(file).store(memory, new Pointer(result));
@@ -653,15 +669,11 @@ export function init(
     memory: WebAssembly.Memory;
     args?: Arg[];
     envs?: Env[];
-    stdout?: (str: string) => void;
-    stderr?: (str: string) => void;
   },
 ) {
   memory = init.memory;
   args = init.args ?? [];
   envs = init.envs ?? [];
-  stdout = init.stdout ?? ((str) => console.log(str));
-  stderr = init.stderr ?? ((str) => console.error(str));
 }
 
 export default init;

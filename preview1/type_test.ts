@@ -1123,6 +1123,13 @@ Deno.test("subscription_clock", async (t) => {
 });
 
 Deno.test("fd", async (t) => {
+  await t.step("constructor(negative number)", () => {
+    assertEquals(
+      new Fd(-2147483648),
+      new Fd(2147483648),
+    );
+  });
+
   await t.step("cast()", () => {
     const memory = new WebAssembly.Memory({ initial: 1 });
     const pointer = randomPointer(Fd);

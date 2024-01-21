@@ -23,21 +23,19 @@ const { _start, memory } = await WebAssembly.instantiateStreaming(
   }
 );
 
-const strs: string[] = [];
-const stdout = (str: string) => {
-  // console.debug(str);
-  strs.push(str);
-};
-const stderr = (str: string) => {
-  // console.debug(str);
-  strs.push(str);
-};
-
 const args = Deno.args.map((arg) => new Preview1.Arg(arg));
 const envs = [
   new Preview1.Env("DEBUG", "1"),
 ];
-Preview1.init({ memory, stdout, stderr, args, envs });
+Preview1.init({ memory, args, envs });
+
+const strs: string[] = [];
+Preview1.FS.findByFd(new Preview1.Type.Fd(Preview1.Type.Fd.stdout))?.hooks.push(
+  (_event, msg) => strs.push(msg),
+);
+Preview1.FS.findByFd(new Preview1.Type.Fd(Preview1.Type.Fd.stderr))?.hooks.push(
+  (_event, msg) => strs.push(msg),
+);
 
 try {
   _start();

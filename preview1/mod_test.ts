@@ -19,6 +19,7 @@ import {
   Filetype,
   Inode,
   Iovec,
+  Oflags,
   Pointer,
   Preopentype,
   Prestat,
@@ -252,11 +253,13 @@ Deno.test("fd_write", async (t) => {
   let stdout = "";
   let stderr = "";
 
-  init({
-    memory,
-    stdout: (str) => stdout += str,
-    stderr: (str) => stderr += str,
-  });
+  init({ memory });
+  FS.findByFd(new Fd(Fd.stdout))?.hooks.push(
+    (_event, msg) => stdout += msg,
+  );
+  FS.findByFd(new Fd(Fd.stderr))?.hooks.push(
+    (_event, msg) => stderr += msg,
+  );
 
   await t.step("Stdout", () => {
     data.setUint32(4, 100, true);
@@ -897,7 +900,7 @@ Deno.test("path_open", async (t) => {
         toValue(0),
         toPointer(64),
         toValue("/home/kawaii".length),
-        toValue(0),
+        new Oflags(0).value,
         toBigValue(0n),
         toBigValue(0n),
         toValue(0),
@@ -913,5 +916,59 @@ Deno.test("path_open", async (t) => {
       new FS.FileState({ file: FS.File.home }),
     );
     FS.closeByFd(Fd.cast(memory, new Pointer(128)));
+  });
+
+  await t.step("oflags=creat|excl", () => {
+    const memory = new WebAssembly.Memory({ initial: 1 });
+    init({ memory });
+
+    const filename = "test.path_open.oflags.create";
+
+    encoder.encodeInto(
+      filename,
+      new Uint8Array(memory.buffer, 64, filename.length),
+    );
+
+    // 1st
+    assertEquals(
+      path_open(
+        Fd.home,
+        toValue(0),
+        toPointer(64),
+        toValue(filename.length),
+        new Oflags(Oflags.creat | Oflags.excl).value,
+        toBigValue(0n),
+        toBigValue(0n),
+        toValue(0),
+        toPointer(128),
+      ),
+      Errno.success,
+    );
+
+    // 2nd
+    assertEquals(
+      path_open(
+        Fd.home,
+        toValue(0),
+        toPointer(64),
+        toValue(filename.length),
+        new Oflags(Oflags.creat | Oflags.excl).value,
+        toBigValue(0n),
+        toBigValue(0n),
+        toValue(0),
+        toPointer(128),
+      ),
+      Errno.exist,
+    );
+
+    const fd = Fd.cast(memory, new Pointer(128));
+
+    assertEquals(
+      FS.findByFd(fd),
+      new FS.FileState({
+        file: FS.find(`/home/kawaii/${filename}`)!,
+      }),
+    );
+    FS.closeByFd(fd);
   });
 });

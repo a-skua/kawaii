@@ -50,12 +50,16 @@ abstract class U16<T extends string> implements Data<T> {
   static readonly size = 2;
   static readonly alignment = 2;
 
-  readonly value: Value<number, U16<T>>;
+  private readonly _value: Value<number, U16<T>>;
+
+  get value(): Value<number, U16<T>> {
+    return this._value;
+  }
 
   constructor(
     value: Value<number, U16<T>> | number,
   ) {
-    this.value = value as Value<number, U16<T>>;
+    this._value = value as Value<number, U16<T>>;
   }
 
   store(mem: Memory, ptr: Pointer<U16<T>>, offset: Offset = 0) {
@@ -88,12 +92,16 @@ abstract class U32<T extends string> implements Data<T> {
   static readonly size = 4;
   static readonly alignment = 4;
 
-  readonly value: Value<number, U32<T>>;
+  private readonly _value: Value<number, U32<T>>;
+
+  get value(): Value<number, U32<T>> {
+    return this._value;
+  }
 
   constructor(
     value: Value<number, U32<T>> | number,
   ) {
-    this.value = value as Value<number, U32<T>>;
+    this._value = value as Value<number, U32<T>>;
   }
 
   store(mem: Memory, ptr: Pointer<U32<T>>, offset: Offset = 0) {
@@ -777,6 +785,12 @@ export class Rights extends U64<"rights"> {
 // A file descriptor handle.
 export class Fd extends U32<"fd"> {
   readonly __data = "fd";
+
+  constructor(
+    value: number | Value<number, Fd>,
+  ) {
+    super(value >>> 0);
+  }
 
   static cast(
     mem: Memory,
@@ -1889,6 +1903,10 @@ export class Event implements Data<"event">, EventParams {
 export class Oflags extends U16<"oflags"> {
   readonly __data = "oflags";
 
+  get value(): Value<number, Oflags> {
+    return super.value as Value<number, Oflags>;
+  }
+
   static cast(mem: Memory, ptr: Pointer<Oflags>, offset: Offset = 0): Oflags {
     return new Oflags(this.getValue(mem, ptr, offset));
   }
@@ -1919,6 +1937,11 @@ export class Oflags extends U16<"oflags"> {
 
   get trunc(): boolean {
     return (this.value & Oflags.trunc) > 0;
+  }
+
+  // Use to Debug
+  toString(): string {
+    return `oflags(creat=${this.creat}, directory=${this.directory}, excl=${this.excl}, trunc=${this.trunc})`;
   }
 }
 

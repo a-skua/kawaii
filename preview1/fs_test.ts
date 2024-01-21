@@ -150,6 +150,17 @@ Deno.test("File", async (t) => {
     });
   });
 
+  await t.step("content", () => {
+    const file = new File({
+      name: new FileName("test.txt"),
+      type: File.type.regularFile,
+    });
+
+    assertEquals(file.content, new FileContent(""));
+    file.content += "Hello, World!";
+    assertEquals(file.content, new FileContent("Hello, World!"));
+  });
+
   await t.step("type", async (t) => {
     await t.step("dir", () => {
       assertEquals(
@@ -354,6 +365,73 @@ Deno.test("FileContent", async (t) => {
       new FileContent("Hello").blob,
       encoder.encode("Hello"),
     );
+  });
+});
+
+Deno.test("FileState", async (t) => {
+  await t.step("write()", async (t) => {
+    await t.step("default", () => {
+      const state = new FileState({
+        file: new File({
+          name: new FileName("test_file.txt"),
+          type: File.type.regularFile,
+        }),
+      });
+
+      state.write("Hello");
+      assertEquals(
+        state.file.content,
+        new FileContent("Hello"),
+      );
+
+      state.write("World");
+      assertEquals(
+        state.file.content,
+        new FileContent("World"),
+      );
+    });
+
+    await t.step("append", () => {
+      const state = new FileState({
+        file: new File({
+          name: new FileName("test_file.txt"),
+          type: File.type.regularFile,
+        }),
+        wasi_fdflags: new WASI.Fdflags(WASI.Fdflags.append),
+      });
+
+      state.write("Hello");
+      assertEquals(
+        state.file.content,
+        new FileContent("Hello"),
+      );
+
+      state.write("World");
+      assertEquals(
+        state.file.content,
+        new FileContent("HelloWorld"),
+      );
+    });
+  });
+
+  await t.step("hooks", () => {
+    const state = findByFd(open(
+      new File({
+        name: new FileName("test_file.txt"),
+        type: File.type.regularFile,
+      }),
+    ))!;
+
+    const actual: [string, string][] = [];
+    state.hooks.push((event, msg) => actual.push([event, msg]));
+
+    state.write("Hello");
+    state.write("World");
+
+    assertEquals(actual, [
+      ["write", "Hello"],
+      ["write", "World"],
+    ]);
   });
 });
 
