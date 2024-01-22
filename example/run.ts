@@ -30,10 +30,10 @@ const envs = [
 Preview1.init({ memory, args, envs });
 
 const strs: string[] = [];
-Preview1.FS.findByFd(new Preview1.Type.Fd(Preview1.Type.Fd.stdout))?.hooks.push(
+Preview1.FS.find(new Preview1.Type.Fd(Preview1.Type.Fd.stdout))?.hooks.push(
   (_event, msg) => strs.push(msg),
 );
-Preview1.FS.findByFd(new Preview1.Type.Fd(Preview1.Type.Fd.stderr))?.hooks.push(
+Preview1.FS.find(new Preview1.Type.Fd(Preview1.Type.Fd.stderr))?.hooks.push(
   (_event, msg) => strs.push(msg),
 );
 

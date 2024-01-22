@@ -1,6 +1,7 @@
 import * as WASI from "./type.ts";
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 interface Fs<T extends string> {
   __fs: T;
@@ -391,7 +392,6 @@ const root = File.dir("").append(
 type FileStateParams = {
   readonly file: File;
   readonly wasi_fdflags: WASI.Fdflags;
-  readonly read?: number;
 };
 
 export class FileState implements Fs<"file_state"> {
@@ -402,16 +402,14 @@ export class FileState implements Fs<"file_state"> {
   private readonly _wasi_fdflags: WASI.Fdflags;
 
   // Read Offset
-  public read: number;
+  private _readOffset = 0;
 
   constructor({
     file,
-    read = 0,
     wasi_fdflags,
   }: FileStateParams) {
     this.file = file;
     this._wasi_fdflags = wasi_fdflags;
-    this.read = read;
   }
 
   write(msg: string): void {
@@ -423,6 +421,17 @@ export class FileState implements Fs<"file_state"> {
     this.hooks.forEach((hook) => hook("write", msg));
   }
 
+  read(): FileContent {
+    // TODO Refactoring
+    const content = this.file.type.characterDevice
+      ? new FileContent(prompt("") ?? "")
+      : new FileContent(
+        decoder.decode(this.file.content.blob.slice(this._readOffset)),
+      );
+    this._readOffset += content.blob.length;
+    return content;
+  }
+
   readonly hooks: ((event: "write", msg: string) => void)[] = [];
 }
 
@@ -430,7 +439,7 @@ const home = root.find("/home/kawaii")!;
 
 let current = home; // TODO
 
-export const find = (path: string): File | undefined => {
+export const findFile = (path: string): File | undefined => {
   return current.find(path);
 };
 
@@ -465,10 +474,10 @@ export const open = (file: File, wasi_fdflags: WASI.Fdflags): WASI.Fd => {
   return fd;
 };
 
-export const findByFd = (fd: WASI.Fd): FileState | undefined => {
+export const find = (fd: WASI.Fd): FileState | undefined => {
   return openMap.get(fd.value);
 };
 
-export const closeByFd = (fd: WASI.Fd) => {
+export const close = (fd: WASI.Fd) => {
   openMap.delete(fd.value);
 };

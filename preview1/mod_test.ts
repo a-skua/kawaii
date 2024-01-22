@@ -254,10 +254,10 @@ Deno.test("fd_write", async (t) => {
   let stderr = "";
 
   init({ memory });
-  FS.findByFd(new Fd(Fd.stdout))?.hooks.push(
+  FS.find(new Fd(Fd.stdout))?.hooks.push(
     (_event, msg) => stdout += msg,
   );
-  FS.findByFd(new Fd(Fd.stderr))?.hooks.push(
+  FS.find(new Fd(Fd.stderr))?.hooks.push(
     (_event, msg) => stderr += msg,
   );
 
@@ -793,7 +793,7 @@ Deno.test("fd_close", async (t) => {
     );
 
     assertEquals(
-      FS.findByFd(fd),
+      FS.find(fd),
       undefined,
     );
   });
@@ -861,7 +861,7 @@ Deno.test("path_filestat_get", async (t) => {
     );
     assertEquals(
       Filestat.cast(memory, new Pointer(128)),
-      FS.find("/home")!.wasi_filestat(),
+      FS.findFile("/home")!.wasi_filestat(),
     );
   });
 });
@@ -914,10 +914,10 @@ Deno.test("path_open", async (t) => {
     console.debug(Fd.cast(memory, new Pointer(128)));
 
     assertEquals(
-      FS.findByFd(Fd.cast(memory, new Pointer(128))),
+      FS.find(Fd.cast(memory, new Pointer(128))),
       new FS.FileState({ file: FS.File.home, wasi_fdflags: Fdflags.zero() }),
     );
-    FS.closeByFd(Fd.cast(memory, new Pointer(128)));
+    FS.close(Fd.cast(memory, new Pointer(128)));
   });
 
   await t.step("oflags=creat|excl", () => {
@@ -966,12 +966,12 @@ Deno.test("path_open", async (t) => {
     const fd = Fd.cast(memory, new Pointer(128));
 
     assertEquals(
-      FS.findByFd(fd),
+      FS.find(fd),
       new FS.FileState({
-        file: FS.find(`/home/kawaii/${filename}`)!,
+        file: FS.findFile(`/home/kawaii/${filename}`)!,
         wasi_fdflags: Fdflags.zero(),
       }),
     );
-    FS.closeByFd(fd);
+    FS.close(fd);
   });
 });

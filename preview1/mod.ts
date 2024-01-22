@@ -209,7 +209,7 @@ export function fd_write(
     len += iov.buf_len.value;
   }
 
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -294,7 +294,7 @@ export function poll_oneoff(
 //
 // Close a file descriptor. Note: This is similar to close in POSIX.
 export function fd_close(fd: Value<number, Fd>): Value<number, Errno> {
-  FS.closeByFd(new Fd(fd));
+  FS.close(new Fd(fd));
   return Errno.success;
 }
 
@@ -349,7 +349,7 @@ export function fd_read(
   // The number of bytes read.
   result: Value<number, Pointer<Size>>,
 ): Value<number, Errno> {
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -357,13 +357,11 @@ export function fd_read(
   let read_size = 0;
   for (let i = 0; i < iovs_size; i += 1) {
     const iov = IovecArray.cast(memory, new Pointer(iovs), IovecArray.size * i);
-    const read = state.file.content.blob.subarray(
-      state.read,
-      iov.buf_len.value,
+    const read = state.read();
+    new Uint8Array(memory.buffer, iov.buf.value, iov.buf_len.value).set(
+      read.blob,
     );
-    new Uint8Array(memory.buffer, iov.buf.value, iov.buf_len.value).set(read);
-    state.read += read.length;
-    read_size += read.length;
+    read_size += read.blob.length;
   }
 
   new Size(read_size).store(memory, new Pointer(result));
@@ -378,7 +376,7 @@ export function fd_fdstat_get(
   fd: Value<number, Fd>,
   result: Value<number, Pointer<Fdstat>>,
 ): Value<number, Errno> {
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -396,7 +394,7 @@ export function fd_fdstat_set_flags(
   // The desired values of the file descriptor flags.
   flags: Value<number, Fdflags>,
 ): Value<number, Errno> {
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -413,7 +411,7 @@ export function fd_prestat_get(
   // The buffer where the description is stored.
   result: Value<number, Pointer<Prestat>>,
 ): Value<number, Errno> {
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -436,7 +434,7 @@ export function fd_prestat_dir_name(
   path: Value<number, Pointer<U8<string>>>,
   path_len: Value<number, Size>,
 ): Value<number, Errno> {
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -469,7 +467,7 @@ export function fd_readdir(
   // read buffer, the end of the directory has been reached.
   result: Value<number, Pointer<Size>>,
 ): Value<number, Errno> {
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -511,7 +509,7 @@ export function path_filestat_get(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
 
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -557,7 +555,7 @@ export function path_open(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
 
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }
@@ -610,7 +608,7 @@ export function path_unlink_file(
     new Uint8Array(memory.buffer, path_buf, path_len),
   );
 
-  const state = FS.findByFd(new Fd(fd));
+  const state = FS.find(new Fd(fd));
   if (!state) {
     return Errno.badf;
   }

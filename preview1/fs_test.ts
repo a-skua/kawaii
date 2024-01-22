@@ -1,6 +1,6 @@
 import { assertEquals } from "assert";
 import {
-  closeByFd,
+  close,
   DeviceId,
   File,
   FileContent,
@@ -9,7 +9,7 @@ import {
   FileState,
   FileType,
   find,
-  findByFd,
+  findFile,
   open,
   Timestamp,
   Value,
@@ -443,7 +443,7 @@ Deno.test("FileState", async (t) => {
   });
 
   await t.step("hooks", () => {
-    const state = findByFd(open(
+    const state = find(open(
       new File({
         name: new FileName("test_file.txt"),
         type: File.type.regularFile,
@@ -464,42 +464,42 @@ Deno.test("FileState", async (t) => {
   });
 });
 
-Deno.test("find()", async (t) => {
+Deno.test("findFile()", async (t) => {
   await t.step("/", () => {
-    assertEquals(find("/"), File.root);
+    assertEquals(findFile("/"), File.root);
   });
 
   await t.step("/", () => {
-    assertEquals(find("/"), File.root);
+    assertEquals(findFile("/"), File.root);
   });
 
   const dir = File.dir("test_find_dir");
   File.root.append(dir);
   await t.step("/test_find_dir", () => {
-    assertEquals(find("/test_find_dir"), dir);
+    assertEquals(findFile("/test_find_dir"), dir);
   });
   await t.step("/test_find_dir/", () => {
-    assertEquals(find("/test_find_dir/"), dir);
+    assertEquals(findFile("/test_find_dir/"), dir);
   });
 
   await t.step("../", () => {
     File.current = File.root;
 
-    assertEquals(find("../"), undefined);
+    assertEquals(findFile("../"), undefined);
   });
 });
 
-Deno.test("findByFd()", async (t) => {
+Deno.test("find()", async (t) => {
   await t.step("stdout", () => {
     assertEquals(
-      !!findByFd(new WASI.Fd(WASI.Fd.stdout)),
+      !!find(new WASI.Fd(WASI.Fd.stdout)),
       true,
     );
   });
 
   await t.step("undefined fd", () => {
     assertEquals(
-      findByFd(WASI.Fd.provide()),
+      find(WASI.Fd.provide()),
       undefined,
     );
   });
@@ -514,14 +514,14 @@ Deno.test("close()", () => {
   const fd = open(file, wasi_fdflags);
 
   assertEquals(
-    findByFd(fd),
+    find(fd),
     new FileState({ file, wasi_fdflags }),
   );
 
-  closeByFd(fd);
+  close(fd);
 
   assertEquals(
-    findByFd(fd),
+    find(fd),
     undefined,
   );
 });
