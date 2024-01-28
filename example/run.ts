@@ -29,12 +29,15 @@ const envs = [
 ];
 Preview1.init({ memory, args, envs });
 
-const strs: string[] = [];
+const encoder = new TextEncoder();
+Preview1.FS.find(new Preview1.Type.Fd(Preview1.Type.Fd.stdin))?.hooks.push(
+  (_event, _msg) => Deno.stdout.writeSync(encoder.encode("\n")),
+);
 Preview1.FS.find(new Preview1.Type.Fd(Preview1.Type.Fd.stdout))?.hooks.push(
-  (_event, msg) => strs.push(msg),
+  (_event, msg) => Deno.stdout.writeSync(encoder.encode(msg)),
 );
 Preview1.FS.find(new Preview1.Type.Fd(Preview1.Type.Fd.stderr))?.hooks.push(
-  (_event, msg) => strs.push(msg),
+  (_event, msg) => Deno.stdout.writeSync(encoder.encode(msg)),
 );
 
 try {
@@ -42,7 +45,6 @@ try {
 } catch (e) {
   console.error(e);
 } finally {
-  console.debug(strs.join(""));
   for (const debug of log) {
     console.debug(debug);
   }

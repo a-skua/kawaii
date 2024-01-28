@@ -423,6 +423,7 @@ export class FileState implements Fs<"file_state"> {
 
   read(): FileContent {
     // TODO Refactoring
+    this.hooks.forEach((hook) => hook("read", ""));
     const content = this.file.type.characterDevice
       ? new FileContent(prompt("") ?? "")
       : new FileContent(
@@ -432,7 +433,7 @@ export class FileState implements Fs<"file_state"> {
     return content;
   }
 
-  readonly hooks: ((event: "write", msg: string) => void)[] = [];
+  readonly hooks: ((event: "write" | "read", msg: string) => void)[] = [];
 }
 
 const home = root.find("/home/kawaii")!;
