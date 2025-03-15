@@ -2,10 +2,11 @@
   "name": "@askua/kawaii",
   "version": "1.0.0-1",
   "exports": {
-    ".": "mod.ts",
-    "./wasip1": "wasip1.ts"
+    ".": "./mod.ts",
+    "./wasip1": "./wasip1.ts"
   },
   "tasks": {
+    "docs": "deno doc --output=docs --html mod.ts wasip1.ts wasip1/mod.ts",
     "example": "deno run --allow-env --allow-read example/run.ts",
     "test": "deno test --coverage=coverage; deno coverage --lcov --output=coverage.lcov coverage; genhtml -o coverage/html coverage.lcov",
     "coverage": "deno task test; python3 -m http.server -d coverage/html"
@@ -15,6 +16,6 @@
   },
   "imports": {
     "@askua/core": "jsr:@askua/core@^1.1.2",
-    "assert": "https://deno.land/std@0.212.0/assert/mod.ts"
+    "@std/assert": "jsr:@std/assert@^1.0.11"
   }
 }

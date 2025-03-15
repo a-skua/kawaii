@@ -4,5 +4,5 @@ const mod = await WebAssembly.compileStreaming(
   fetch(new URL("hello.wasm", import.meta.url)),
 );
 
-const { _start } = instantiate(mod);
-_start();
+const { run } = instantiate(mod, true);
+console.log(run("hello.wasm"));

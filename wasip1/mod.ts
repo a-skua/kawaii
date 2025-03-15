@@ -2,6 +2,7 @@ import {
   type Ciovec,
   type Clockid,
   Errno,
+  Exit,
   type Exitcode,
   type Fd,
   type Fdflags,
@@ -26,32 +27,82 @@ export function sched_yield(): Errno {
  * Terminate the process normally. An exit code of 0 indicates successful
  * termination of the program. The meanings of other values is dependent on the
  * environment.
+ *
+ * @param rval exitcode The exit code returned by the process.
  */
 export function proc_exit(rval: Exitcode): void {
-  // TODO
-  throw new Error(`proc_exit(${rval})`);
+  throw new Exit(rval);
 }
 
 /**
  * Read command-line argument data. The size of the array should match that
- * returned by [args_sizes_get]. Each argument is expected to be \0 terminated.
+ * returned by {@link args_sizes_get}. Each argument is expected to be `\0` terminated.
+ *
+ * @param argv
+ * @param argv_buf
+ *
+ * @returns `Result<(), errno>`
+ *
+ * ## Variant Layout
+ *
+ * - size: 8
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok
+ * - err: errno
+ *
+ * @param argv The buffer to write the argument data to.
  */
 export function args_get(
-  _argv: Pointer<Pointer<U8>>,
-  _argv_buf: Pointer<U8>,
+  argv: Pointer<Pointer<U8>>,
+  argv_buf: Pointer<U8>,
 ): Errno {
-  // TODO
+  for (const arg of _args) {
+    _memory.setUint32(argv, argv_buf, true);
+    argv = argv + 4;
+
+    new Uint8Array(_memory.buffer, argv_buf, arg.length).set(arg);
+    argv_buf += arg.length;
+  }
+
   return Errno.success;
 }
 
 /**
  * Return command-line argument data sizes.
+ *
+ * @returns `Result<(size, size), errno>` Returns the number of arguments and
+ * the size of the argument string data, or an error.
+ *
+ * ## Variant Layout
+ *
+ * - size: 12
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: (size, size)
+ * - err: errno
+ *
+ * ### Record members
+ * - 0: size
+ *   - Offset: 0
+ *
+ * - 1: size
+ *   - Offset: 4
  */
 export function args_sizes_get(
-  _args_num: Pointer<Size>,
-  _buf_size: Pointer<Size>,
+  args_num: Pointer<Size>,
+  buf_size: Pointer<Size>,
 ): Errno {
-  // TODO
+  const size = _args.reduce((acc, arg) => acc + arg.length, 0);
+
+  _memory.setUint32(args_num, _args.length, true);
+  _memory.setUint32(buf_size, size, true);
   return Errno.success;
 }
 
@@ -98,14 +149,45 @@ export function environ_sizes_get(
  * Like POSIX, any calls of `write` (and other functions to read or write) for a
  * regular file by other threads in the WASI process should not be interleaved
  * while `write` is executed.
+ *
+ * @param fd {@link Fd}
+ * @param iovs ciovec_array List of scatter/gather vectors from which to retrieve data.
+ * @param iovs_size ciovec_array List of scatter/gather vectors from which to retrieve data.
+ *
+ * @returns `Result<size, errno>`
+ *
+ * ## Variant Layout
+ *
+ * - size: 8
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: size
+ * - err: errno
  */
 export function fd_write(
-  _fd: Fd,
-  _iovs: Pointer<Ciovec>,
-  _iovs_size: Size,
-  _result: Pointer<Size>,
-): Errno {
   // TODO
+  _fd: Fd,
+  iovs: Pointer<Ciovec>,
+  iovs_size: Size,
+  result: Pointer<Size>,
+): Errno {
+  let str = "";
+  let len = 0;
+
+  for (let i = 0; i < iovs_size; i++) {
+    const iov = iovs + i * 8;
+    const buf = _memory.getUint32(iov, true);
+    const buf_len = _memory.getUint32(iov + 4, true);
+
+    str += _decoder.decode(new Uint8Array(_memory.buffer, buf, buf_len));
+    len += buf_len;
+  }
+
+  console.debug(str);
+  _memory.setUint32(result, len, true);
   return Errno.success;
 }
 
@@ -193,4 +275,17 @@ export function fd_prestat_dir_name(
 ): Errno {
   // TODO
   return Errno.success;
+}
+
+let _memory: DataView;
+let _args: Uint8Array[];
+const _encoder = new TextEncoder();
+const _decoder = new TextDecoder();
+
+/**
+ * @param memory The memory instance of the WebAssembly module.
+ */
+export function _init(memory: WebAssembly.Memory, args: string[]): void {
+  _memory = new DataView(memory.buffer);
+  _args = args.map((arg) => _encoder.encode(`${arg}\0`));
 }
