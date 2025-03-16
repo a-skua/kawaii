@@ -1,5 +1,5 @@
-import { assertEquals, assertThrows } from "@std/assert";
-import { Exit, Exitcode } from "./types.ts";
+import { assertEquals, assertNotEquals, assertThrows } from "@std/assert";
+import { Clockid, Errno, Exit, Exitcode, Size, Timestamp } from "./types.ts";
 import * as wasip1 from "./mod.ts";
 
 Deno.test("proc_exit", () => {
@@ -45,4 +45,37 @@ Deno.test("args_sizes_get", () => {
     dataView.getUint32(4, true),
     args.reduce((acc, arg) => acc + arg.length + 1, 0),
   );
+});
+
+Deno.test("clock_time_get", async (t) => {
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const dataView = new DataView(memory.buffer);
+
+  wasip1._init(memory, []);
+
+  await t.step("Clockid.realtime", () => {
+    assertEquals(
+      wasip1.clock_time_get(Clockid.realtime, Timestamp(0n), 8),
+      Errno.success,
+    );
+    assertNotEquals(dataView.getBigInt64(8, true), 0n);
+  });
+
+  await t.step("Clockid.monotonic", () => {
+    assertEquals(
+      wasip1.clock_time_get(Clockid.monotonic, Timestamp(0n), 8),
+      Errno.success,
+    );
+    assertNotEquals(dataView.getBigInt64(8, true), 0n);
+  });
+});
+
+Deno.test("random_get", () => {
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const dataView = new DataView(memory.buffer);
+
+  wasip1._init(memory, []);
+
+  assertEquals(wasip1.random_get(8, Size(4)), Errno.success);
+  assertNotEquals(dataView.getUint32(8), 0);
 });

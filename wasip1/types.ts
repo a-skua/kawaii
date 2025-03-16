@@ -16,7 +16,14 @@ export type U32 = number;
 
 /**
  * ```ts
- * const ptr: Pointer<u8> = 0;
+ * const u64: U64 = 0n;
+ * ```
+ */
+export type U64 = bigint;
+
+/**
+ * ```ts
+ * const ptr: Pointer<U8> = 0;
  * ```
  */
 export type Pointer<_> = number;
@@ -35,15 +42,31 @@ export class Exit extends Error {
 export type Size = Brand<U32, "wasi_snapshot_preview1.size">;
 export const Size = Brand<U32, "wasi_snapshot_preview1.size">;
 
+const timestamp = (u64: U64) =>
+  Brand<U64, "wasi_snapshot_preview1.timestamp">(u64);
+
 /**
  * timestamp: u64
  *
  * Timestamp in nanoseconds.
  */
-export type Timestamp = Brand<number, "wasi_snapshot_preview1.timestamp">;
-export const Timestamp = Brand<number, "wasi_snapshot_preview1.timestamp">;
+export type Timestamp = Brand<U64, "wasi_snapshot_preview1.timestamp">;
+export const Timestamp = Object.assign(
+  timestamp,
+  {
+    // TODO
+    realtime(): Timestamp {
+      return timestamp(BigInt(new Date().getTime()) * 1_000_000n);
+    },
+    // TODO
+    monotonic(): Timestamp {
+      return timestamp(BigInt(Math.floor(performance.now() * 1_000_000)));
+    },
+  },
+);
 
-const clockid = Brand<number, "wasi_snapshot_preview1.clockid">;
+const clockid = (id: number) =>
+  Brand<number, "wasi_snapshot_preview1.clockid">(id);
 
 /**
  * clockid: Variant
@@ -95,7 +118,7 @@ export type Exitcode = Brand<U32, "wasi_snapshot_preview1.exitcode">;
  */
 export const Exitcode = Brand<number, "wasi_snapshot_preview1.exitcode">;
 
-const errno = Brand<number, "wasi_snapshot_preview1.errno">;
+const errno = (n: number) => Brand<number, "wasi_snapshot_preview1.errno">(n);
 
 /**
  * errno: Variant
@@ -409,7 +432,8 @@ export type Subscription = Brand<never, "wasi_snapshot_preview1.subscription">;
  */
 export type Event = Brand<never, "wasi_snapshot_preview1.event">;
 
-const fdflags = Brand<number, "wasi_snapshot_preview1.fdflags">;
+const fdflags = (flag: number) =>
+  Brand<number, "wasi_snapshot_preview1.fdflags">(flag);
 
 /**
  * File descriptor flags.

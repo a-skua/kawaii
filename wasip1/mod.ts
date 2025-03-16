@@ -1,6 +1,6 @@
 import {
   type Ciovec,
-  type Clockid,
+  Clockid,
   Errno,
   Exit,
   type Exitcode,
@@ -11,7 +11,7 @@ import {
   type Prestat,
   type Size,
   type Subscription,
-  type Timestamp,
+  Timestamp,
   type U8,
 } from "./types.ts";
 
@@ -60,8 +60,10 @@ export function args_get(
   argv: Pointer<Pointer<U8>>,
   argv_buf: Pointer<U8>,
 ): Errno {
+  const memory = new DataView(_memory.buffer);
+
   for (const arg of _args) {
-    _memory.setUint32(argv, argv_buf, true);
+    memory.setUint32(argv, argv_buf, true);
     argv = argv + 4;
 
     new Uint8Array(_memory.buffer, argv_buf, arg.length).set(arg);
@@ -99,24 +101,38 @@ export function args_sizes_get(
   args_num: Pointer<Size>,
   buf_size: Pointer<Size>,
 ): Errno {
-  const size = _args.reduce((acc, arg) => acc + arg.length, 0);
+  const memory = new DataView(_memory.buffer);
+  const len: number = _args.length;
+  const size: number = _args.reduce((acc, arg) => acc + arg.length, 0);
 
-  _memory.setUint32(args_num, _args.length, true);
-  _memory.setUint32(buf_size, size, true);
+  memory.setUint32(args_num, len, true);
+  memory.setUint32(buf_size, size, true);
   return Errno.success;
 }
 
 /**
  * Return the time value of a clock. Note: This is similar to `clock_gettime` in
  * POSIX.
+ *
+ * TODO
  */
 export function clock_time_get(
-  _id: Clockid,
+  id: Clockid,
   _precision: Timestamp,
-  _result: Pointer<Timestamp>,
+  result: Pointer<Timestamp>,
 ): Errno {
-  // TODO
-  return Errno.notsup;
+  const memory = new DataView(_memory.buffer);
+
+  switch (id) {
+    case Clockid.realtime:
+      memory.setBigUint64(result, Timestamp.realtime(), true);
+      return Errno.success;
+    case Clockid.monotonic:
+      memory.setBigUint64(result, Timestamp.monotonic(), true);
+      return Errno.success;
+    default:
+      return Errno.notsup;
+  }
 }
 
 /**
@@ -174,20 +190,22 @@ export function fd_write(
   iovs_size: Size,
   result: Pointer<Size>,
 ): Errno {
+  const memory = new DataView(_memory.buffer);
   let str = "";
   let len = 0;
 
   for (let i = 0; i < iovs_size; i++) {
     const iov = iovs + i * 8;
-    const buf = _memory.getUint32(iov, true);
-    const buf_len = _memory.getUint32(iov + 4, true);
+    const buf = memory.getUint32(iov, true);
+    const buf_len = memory.getUint32(iov + 4, true);
+    const source = new Uint8Array(memory.buffer, buf, buf_len);
 
-    str += _decoder.decode(new Uint8Array(_memory.buffer, buf, buf_len));
+    str += _decoder.decode(source);
     len += buf_len;
   }
 
   console.debug(str);
-  _memory.setUint32(result, len, true);
+  memory.setUint32(result, len, true);
   return Errno.success;
 }
 
@@ -200,10 +218,12 @@ export function fd_write(
  * directly.
  */
 export function random_get(
-  _buf: Pointer<U8>,
-  _len: Size,
+  buf: Pointer<U8>,
+  len: Size,
 ): Errno {
-  // TODO
+  const memory = new Uint8Array(_memory.buffer, buf, len);
+
+  crypto.getRandomValues(memory);
   return Errno.success;
 }
 
@@ -277,7 +297,7 @@ export function fd_prestat_dir_name(
   return Errno.success;
 }
 
-let _memory: DataView;
+let _memory: WebAssembly.Memory;
 let _args: Uint8Array[];
 const _encoder = new TextEncoder();
 const _decoder = new TextDecoder();
@@ -286,6 +306,6 @@ const _decoder = new TextDecoder();
  * @param memory The memory instance of the WebAssembly module.
  */
 export function _init(memory: WebAssembly.Memory, args: string[]): void {
-  _memory = new DataView(memory.buffer);
+  _memory = memory;
   _args = args.map((arg) => _encoder.encode(`${arg}\0`));
 }
