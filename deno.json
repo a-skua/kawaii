@@ -7,7 +7,8 @@
   },
   "tasks": {
     "docs": "deno doc --output=docs --html mod.ts wasip1.ts wasip1/mod.ts",
-    "example": "deno run --allow-env --allow-read example/run.ts",
+    "examples/hello": "deno run --no-prompt --allow-read=./examples/hello ./examples/hello/main.ts",
+    "examples/read": "deno run --no-prompt --allow-read=./examples/read ./examples/read/main.ts",
     "test": "deno test --coverage=coverage; deno coverage --lcov --output=coverage.lcov coverage; genhtml -o coverage/html coverage.lcov",
     "coverage": "deno task test; python3 -m http.server -d coverage/html"
   },
