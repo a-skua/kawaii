@@ -15,7 +15,7 @@ export const Instance = (wasm: WebAssembly.Instance): Instance => {
       try {
         // deno-lint-ignore no-explicit-any
         const exports: any = wasm.exports;
-        wasi_snapshot_preview1._init(exports.memory, args);
+        wasi_snapshot_preview1._init(exports.memory, { args });
         exports._start();
       } catch (e) {
         if (e instanceof Exit) {

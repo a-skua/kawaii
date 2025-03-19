@@ -1,3 +1,4 @@
+import * as FS from "./fs.ts";
 import {
   type Ciovec,
   Clockid,
@@ -5,8 +6,8 @@ import {
   Exit,
   type Exitcode,
   type Fd,
-  type Fdflags,
-  type Fdstat,
+  Fdflags,
+  Fdstat,
   type Pointer,
   type Prestat,
   type Size,
@@ -114,7 +115,22 @@ export function args_sizes_get(
  * Return the time value of a clock. Note: This is similar to `clock_gettime` in
  * POSIX.
  *
- * TODO
+ * @param id clockid The clock for which to return the time.
+ * @param precision timestamp The maximum lag (exclusive) that the returned time
+ * value may have, compared to its actual value.
+ *
+ * @returns `Result<timestamp, errno>` The time value of the clock.
+ *
+ * ## Variant Layout
+ *
+ * - size: 16
+ * - align: 8
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: timestamp
+ * - err: errno
  */
 export function clock_time_get(
   id: Clockid,
@@ -141,21 +157,55 @@ export function clock_time_get(
  * with `=`s, and terminated with `\0`s.
  */
 export function environ_get(
-  _environ: Pointer<Pointer<U8>>,
-  _env_buf: Pointer<U8>,
+  environ: Pointer<Pointer<U8>>,
+  env_buf: Pointer<U8>,
 ): Errno {
-  // TODO
+  const memory = new DataView(_memory.buffer);
+
+  for (const env of _env) {
+    memory.setUint32(environ, env_buf, true);
+    environ += 4;
+
+    new Uint8Array(_memory.buffer, env_buf, env.length).set(env);
+    env_buf += env.length;
+  }
   return Errno.success;
 }
 
 /**
  * Return environment variable data sizes.
+ *
+ * @returns `Result<(size, size), errno>` Returns the number of environment
+ * variable arguments and the size of the environment variable data.
+ *
+ * ## Variant Layout
+ *
+ * - size: 12
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: (size, size)
+ * - err: errno
+ *
+ * ### Record members
+ *
+ * - 0: size
+ *   - Offset: 0
+ * - 1: size
+ *   - Offset: 4
  */
 export function environ_sizes_get(
-  _env_num: Pointer<Size>,
-  _buf_size: Pointer<Size>,
+  env_num: Pointer<Size>,
+  buf_size: Pointer<Size>,
 ): Errno {
-  // TODO
+  const memory = new DataView(_memory.buffer);
+  const len: number = _env.length;
+  const size: number = _env.reduce((acc, env) => acc + env.length, 0);
+
+  memory.setUint32(env_num, len, true);
+  memory.setUint32(buf_size, size, true);
   return Errno.success;
 }
 
@@ -255,22 +305,48 @@ export function fd_close(_fd: Fd): Errno {
  * fcntl(fd, F_GETFL) in POSIX, as well as additional fields.
  */
 export function fd_fdstat_get(
-  _fd: Fd,
-  _result: Pointer<Fdstat>,
+  fd: Fd,
+  result: Pointer<Fdstat>,
 ): Errno {
+  const fs = FS.get(fd);
+  if (!fs) return Errno.badf;
+
+  const memory = new DataView(_memory.buffer, result, Fdstat.size);
   // TODO
+  Fdstat.fs_flags_set(memory, fs.fdflags);
+
   return Errno.success;
 }
 
 /**
  * Adjust the flags associated with a file descriptor. Note: This is similar to
- * fcntl(fd, F_SETFL, flags) in POSIX.
+ * `fcntl(fd, F_SETFL, flags)` in POSIX.
+ *
+ * @param fd
+ * @param flags The desired values of the file descriptor flags.
+ *
+ * @returns `Result<(), errno>`
+ *
+ * ## Variant Layout
+ *
+ * - size: 8
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok
+ * - err: errno
  */
 export function fd_fdstat_set_flags(
-  _fd: Fd,
-  _flags: Fdflags,
+  fd: Fd,
+  flags: Fdflags,
 ): Errno {
-  // TODO
+  const fs = FS.get(fd);
+  if (!fs) return Errno.badf;
+
+  // console.debug(`\t---- flags = ${Fdflags.toString(flags)}`);
+  fs.fdflags = flags;
   return Errno.success;
 }
 
@@ -282,7 +358,7 @@ export function fd_prestat_get(
   _result: Pointer<Prestat>,
 ): Errno {
   // TODO
-  return Errno.success;
+  return Errno.badf;
 }
 
 /**
@@ -299,13 +375,26 @@ export function fd_prestat_dir_name(
 
 let _memory: WebAssembly.Memory;
 let _args: Uint8Array[];
+let _env: Uint8Array[];
+
 const _encoder = new TextEncoder();
 const _decoder = new TextDecoder();
+
+export type Env = {
+  args?: string[];
+  env?: { [K in string]: string };
+};
 
 /**
  * @param memory The memory instance of the WebAssembly module.
  */
-export function _init(memory: WebAssembly.Memory, args: string[]): void {
+export function _init(
+  memory: WebAssembly.Memory,
+  { args = [], env = { ENV: "TODO" } }: Env,
+): void {
   _memory = memory;
   _args = args.map((arg) => _encoder.encode(`${arg}\0`));
+  _env = Object.entries(env).map(([key, value]) =>
+    _encoder.encode(`${key}=${value}\0`)
+  );
 }

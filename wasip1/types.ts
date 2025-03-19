@@ -49,16 +49,23 @@ const timestamp = (u64: U64) =>
  * timestamp: u64
  *
  * Timestamp in nanoseconds.
+ *
+ * - Size: 8
+ * - Alignment: 8
  */
 export type Timestamp = Brand<U64, "wasi_snapshot_preview1.timestamp">;
 export const Timestamp = Object.assign(
   timestamp,
   {
-    // TODO
+    /**
+     * Clockid.realtime
+     */
     realtime(): Timestamp {
       return timestamp(BigInt(new Date().getTime()) * 1_000_000n);
     },
-    // TODO
+    /**
+     * Clockid.monotonic
+     */
     monotonic(): Timestamp {
       return timestamp(BigInt(Math.floor(performance.now() * 1_000_000)));
     },
@@ -436,7 +443,12 @@ const fdflags = (flag: number) =>
   Brand<number, "wasi_snapshot_preview1.fdflags">(flag);
 
 /**
+ * fdflags: Record
+ *
  * File descriptor flags.
+ *
+ * - Size: 2
+ * - Alignment: 2
  */
 export type Fdflags = Brand<number, "wasi_snapshot_preview1.fdflags">;
 export const Fdflags = Object.assign(
@@ -445,6 +457,7 @@ export const Fdflags = Object.assign(
     /**
      * bool Append mode: Data written to the file is always appended to
      * the file's end.
+     *
      * - Bit: 0
      */
     append: fdflags(1),
@@ -452,18 +465,21 @@ export const Fdflags = Object.assign(
     /**
      * bool Write according to synchronized I/O data integrity
      * completion. Only the data stored in the file is synchronized.
+     *
      * - Bit: 1
      */
     dsync: fdflags(2),
 
     /**
      * bool Non-blocking mode.
+     *
      * - Bit: 2
      */
     nonblock: fdflags(4),
 
     /**
      * bool Synchronized read I/O operations.
+     *
      * - Bit: 3
      */
     rsync: fdflags(8),
@@ -472,9 +488,20 @@ export const Fdflags = Object.assign(
      * bool Write according to synchronized I/O file integrity completion.
      * In addition to synchronizing the data stored in the file, the
      * implementation may also synchronously update the file's metadata.
+     *
      * - Bit: 4
      */
     sync: fdflags(16),
+
+    toString(f: Fdflags): string {
+      return [
+        `append:${f & Fdflags.append}`,
+        `dsync:${f & Fdflags.dsync}`,
+        `nonblock:${f & Fdflags.nonblock}`,
+        `rsync:${f & Fdflags.rsync}`,
+        `sync:${f & Fdflags.sync}`,
+      ].join(", ");
+    },
   },
 );
 
@@ -500,6 +527,24 @@ export const Fdflags = Object.assign(
  *   - Offset: 16
  */
 export type Fdstat = Brand<never, "wasi_snapshot_preview1.fdstat">;
+export const Fdstat = {
+  size: 24,
+  fs_filetype_set(memory: DataView, filetype: Filetype): void {
+    memory.setUint16(0, filetype, true);
+  },
+
+  fs_flags_set(memory: DataView, fdflags: Fdflags): void {
+    memory.setUint16(2, fdflags, true);
+  },
+
+  fs_rights_base_set(memory: DataView, rights: Rights): void {
+    memory.setBigInt64(8, rights, true);
+  },
+
+  fs_rights_inheriting_set(memory: DataView, rights: Rights): void {
+    memory.setBigInt64(16, rights, true);
+  },
+};
 
 /**
  * prestat: Variant
@@ -520,3 +565,306 @@ export type Fdstat = Brand<never, "wasi_snapshot_preview1.fdstat">;
  * - dir: prestat_dir
  */
 export type Prestat = Brand<never, "wasi_snapshot_preview1.prestat">;
+
+const filetype = Brand<number, "wasi_snapshot_preview1.filetype">;
+
+/**
+ * filetype: Variant
+ *
+ * The type of a file descriptor or file.
+ *
+ * - Size: 1
+ * - Alignment: 1
+ */
+export type Filetype = Brand<number, "wasi_snapshot_preview1.filetype">;
+export const Filetype = Object.assign(
+  (n: number) => filetype(n),
+  {
+    /**
+     * The type of the file descriptor or file is unknown or is different from
+     * any of the other types specified.
+     */
+    unknown: filetype(0 as const),
+
+    /**
+     * The file descriptor or file refers to a block device inode.
+     */
+    block_device: filetype(1),
+
+    /**
+     * The file descriptor or file refers to a character device inode.
+     */
+    character_device: filetype(2),
+
+    /**
+     * The file descriptor or file refers to a directory inode.
+     */
+    directory: filetype(3),
+
+    /**
+     * The file descriptor or file refers to a regular file inode.
+     */
+    regular_file: filetype(4),
+
+    /**
+     * The file descriptor or file refers to a datagram socket.
+     */
+    socket_dgram: filetype(5),
+
+    /**
+     * The file descriptor or file refers to a byte-stream socket.
+     */
+    socket_stream: filetype(6),
+
+    /**
+     * The file refers to a symbolic link inode.
+     */
+    symbolic_link: filetype(7),
+  },
+);
+
+const rights = Brand<U64, "wasi_snapshot_preview1.rights">;
+
+/**
+ * rights: Record
+ *
+ * File descriptor rights, determining which actions may be performed.
+ *
+ * - Size: 8
+ * - Alignment: 8
+ */
+export type Rights = Brand<U64, "wasi_snapshot_preview1.rights">;
+export const Rights = Object.assign(
+  (n: bigint) => rights(n),
+  {
+    /**
+     * The right to invoke `fd_datasync`. If `path_open` is set, includes the
+     * right to invoke path_open with fdflags::dsync.
+     *
+     * - Bit: 0
+     */
+    fd_datasync: rights(1n << 0n),
+
+    /**
+     * The right to invoke `fd_read` and `sock_recv`. If `rights::fd_seek` is
+     * set, includes the right to invoke `fd_pread`.
+     *
+     * - Bit: 1
+     */
+    fd_read: rights(1n << 1n),
+
+    /**
+     * The right to invoke `fd_seek`. This flag implies `rights::fd_tell`.
+     *
+     * - Bit: 2
+     */
+    fd_seek: rights(1n << 2n),
+
+    /**
+     * The right to invoke `fd_fdstat_set_flags`.
+     *
+     * - Bit: 3
+     */
+    fd_fdstat_set_flags: rights(1n << 3n),
+
+    /**
+     * The right to invoke `fd_sync`. If `path_open` is set, includes the right
+     * to invoke `path_open` with `fdflags::rsync` and `fdflags::dsync`.
+     *
+     * - Bit: 4
+     */
+    fd_sync: rights(1n << 4n),
+
+    /**
+     * The right to invoke `fd_seek` in such a way that the file offset remains
+     * unaltered (i.e., `whence::cur` with offset zero), or to invoke `fd_tell`.
+     *
+     * - Bit: 5
+     */
+    fd_tell: rights(1n << 5n),
+
+    /**
+     * The right to invoke `fd_write` and `sock_send`. If `rights::fd_seek` is
+     * set, includes the right to invoke `fd_pwrite`.
+     *
+     * - Bit: 6
+     */
+    fd_write: rights(1n << 6n),
+
+    /**
+     * The right to invoke `fd_advise`.
+     *
+     * - Bit: 7
+     */
+    fd_advise: rights(1n << 7n),
+
+    /**
+     * The right to invoke `fd_allocate`.
+     *
+     * - Bit: 8
+     */
+    fd_allocate: rights(1n << 8n),
+
+    /**
+     * The right to invoke `path_create_directory`.
+     *
+     * - Bit: 9
+     */
+    path_create_directory: rights(1n << 9n),
+
+    /**
+     * If `path_open` is set, the right to invoke `path_open` with
+     * `oflags::creat`.
+     *
+     * - Bit: 10
+     */
+    path_create_file: rights(1n << 10n),
+
+    /**
+     * The right to invoke `path_link` with the file descriptor as the source
+     * directory.
+     *
+     * - Bit: 11
+     */
+    path_link_source: rights(1n << 11n),
+
+    /**
+     * The right to invoke `path_link` with the file descriptor as the target
+     * directory.
+     *
+     * - Bit: 12
+     */
+    path_link_target: rights(1n << 12n),
+
+    /**
+     * The right to invoke `path_open`.
+     *
+     * - Bit: 13
+     */
+    path_open: rights(1n << 13n),
+
+    /**
+     * The right to invoke `fd_readdir`.
+     *
+     * - Bit: 14
+     */
+    fd_readdir: rights(1n << 14n),
+
+    /**
+     * The right to invoke `path_readlink`.
+     *
+     * - BIt: 15
+     */
+    path_readlink: rights(1n << 15n),
+
+    /**
+     * The right to invoke `path_rename` with the file descriptor as the source
+     * directory.
+     *
+     * - Bit: 16
+     */
+    path_rename_source: rights(1n << 16n),
+
+    /**
+     * The right to invoke `path_rename` with the file descriptor as the target
+     * directory.
+     *
+     * - Bit: 17
+     */
+    path_rename_target: rights(1n << 17n),
+
+    /**
+     * The right to invoke `path_filestat_get`.
+     *
+     * - Bit: 18
+     */
+    path_filestat_get: rights(1n << 18n),
+
+    /**
+     * The right to change a file's size. If `path_open` is set, includes the
+     * right to invoke `path_open` with `oflags::trunc`. Note: there is no
+     * function named `path_filestat_set_size`. This follows POSIX design, which
+     * only has `ftruncate` and does not provide `ftruncateat`. While such
+     * function would be desirable from the API design perspective, there are
+     * virtually no use cases for it since no code written for POSIX systems
+     * would use it. Moreover, implementing it would require multiple syscalls,
+     * leading to inferior performance.
+     *
+     * - Bit: 19
+     */
+    path_filestat_set_size: rights(1n << 19n),
+
+    /**
+     * The right to invoke `path_filestat_set_times`.
+     *
+     * - Bit: 20
+     */
+    path_filestat_set_times: rights(1n << 20n),
+
+    /**
+     * The right to invoke `fd_filestat_get`.
+     *
+     * - Bit: 21
+     */
+    fd_filestat_get: rights(1n << 21n),
+
+    /**
+     * The right to invoke fd_filestat_set_size.
+     *
+     * - Bit: 22
+     */
+    fd_filestat_set_size: rights(1n << 22n),
+
+    /**
+     * The right to invoke `fd_filestat_set_times`.
+     *
+     * - Bit: 23
+     */
+    fd_filestat_set_times: rights(1n << 23n),
+
+    /**
+     * The right to invoke `path_symlink`.
+     *
+     * - Bit: 24
+     */
+    path_symlink: rights(1n << 24n),
+
+    /**
+     * The right to invoke `path_remove_directory`.
+     *
+     * - Bit: 25
+     */
+    path_remove_directory: rights(1n << 25n),
+
+    /**
+     * The right to invoke `path_unlink_file`.
+     *
+     * - Bit: 26
+     */
+    path_unlink_file: rights(1n << 26n),
+
+    /**
+     * If `rights::fd_read` is set, includes the right to invoke `poll_oneoff`
+     * to subscribe to `eventtype::fd_read`. If `rights::fd_write` is set,
+     * includes the right to invoke `poll_oneoff` to subscribe to
+     * `eventtype::fd_write`.
+     *
+     * - Bit: 27
+     */
+    poll_fd_readwrite: rights(1n << 27n),
+
+    /**
+     * The right to invoke `sock_shutdown`.
+     *
+     * - Bit: 28
+     */
+    sock_shutdown: rights(1n << 28n),
+
+    /**
+     * The right to invoke `sock_accept`.
+     *
+     * - Bit: 29
+     */
+    sock_accept: rights(1n << 29n),
+  },
+);
