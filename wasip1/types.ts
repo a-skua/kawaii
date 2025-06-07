@@ -380,6 +380,26 @@ export type Fd = Brand<number, "wasi_snapshot_preview1.fd">;
 export const Fd = Brand<number, "wasi_snapshot_preview1.fd">;
 
 /**
+ * iovec: Record
+ *
+ * A region of memory for scatter/gather reads.
+ *
+ * - Size: 8
+ * - Alignment: 4
+ *
+ * ## Record members
+ *
+ * - buf: Pointer<u8> The address of the buffer to be filled.
+ *   - Offset: 0
+ * - buf_len: size The length of the buffer to be filled.
+ *   - Offset: 4
+ */
+export type Iovec = Brand<never, "wasi_snapshot_preview1.iovec">;
+export const Iovec = {
+  size: 8,
+};
+
+/**
  * ciovec: Record
  *
  * A region of memory for scatter/gather writes.
@@ -565,6 +585,9 @@ export const Fdstat = {
  * - dir: prestat_dir
  */
 export type Prestat = Brand<never, "wasi_snapshot_preview1.prestat">;
+export const Prestat = {
+  size: 8,
+};
 
 const filetype = Brand<number, "wasi_snapshot_preview1.filetype">;
 

@@ -1,6 +1,6 @@
 import { Exit } from "./wasip1/types.ts";
 export * from "./wasip1/types.ts";
-import * as wasi_snapshot_preview1 from "./wasip1/mod.ts";
+import wasip1Init, * as wasi_snapshot_preview1 from "./wasip1/mod.ts";
 
 /**
  * WASIp1 Interface
@@ -15,7 +15,7 @@ export const Instance = (wasm: WebAssembly.Instance): Instance => {
       try {
         // deno-lint-ignore no-explicit-any
         const exports: any = wasm.exports;
-        wasi_snapshot_preview1._init(exports.memory, { args });
+        wasip1Init(exports.memory, { args });
         exports._start();
       } catch (e) {
         if (e instanceof Exit) {

@@ -8,8 +8,9 @@ import {
   type Fd,
   Fdflags,
   Fdstat,
+  Iovec,
   type Pointer,
-  type Prestat,
+  Prestat,
   type Size,
   type Subscription,
   Timestamp,
@@ -234,8 +235,7 @@ export function environ_sizes_get(
  * - err: errno
  */
 export function fd_write(
-  // TODO
-  _fd: Fd,
+  _fd: Fd, // TODO
   iovs: Pointer<Ciovec>,
   iovs_size: Size,
   result: Pointer<Size>,
@@ -254,9 +254,124 @@ export function fd_write(
     len += buf_len;
   }
 
-  console.debug(str);
+  console.debug(str); // FIXME
   memory.setUint32(result, len, true);
   return Errno.success;
+}
+
+/**
+ * Read from a file descriptor. Note: This is similar to readv in POSIX.
+ *
+ * @param fd
+ * @param iovs iovec_array List of scatter/gather vectors to which to store data.
+ *
+ * @returns `Result<size, errno>` The number of bytes read.
+ *
+ * ## Variant Layout
+ *
+ * - size: 8
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: size
+ * - err: errno
+ */
+
+export function fd_read(
+  _id: Fd, // TODO
+  iovs: Pointer<Iovec>,
+  iovs_len: Size,
+  result: Pointer<Size>,
+): Errno {
+  const memory = new DataView(_memory.buffer);
+
+  let read_size = 0;
+  for (let i = 0; i < iovs_len; i += 1) {
+    const iov = iovs + i * Iovec.size;
+    const buf = memory.getUint32(iov, true);
+    const buf_len = memory.getUint32(iov + 4, true);
+    const read = prompt(); // FIXME
+      if (read === null) {
+        return Errno.io;
+      }
+
+    const { written } = _encoder.encodeInto(read, new Uint8Array(_memory.buffer, buf, buf_len));
+    read_size += written;
+  }
+
+  memory.setUint32(result, read_size, true);
+  return Errno.success;
+}
+
+/**
+ * Return the attributes of a file or directory. Note: This is similar to `stat`
+ * in POSIX.
+ *
+ * @param fd
+ * @param flags `lookupflags` Flags determining the method of how the path is
+ * resolved.
+ * @param path `string` The path of the file or directory to inspect.
+ *
+ * @returns `Result<filestat, errno>` The buffer where the file's attributes are
+ * stored.
+ *
+ * ## Variant Layout
+ *
+ * - size: 72
+ * - align: 8
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: filestat
+ * - err: errno
+ */
+export function path_filestat_get() {
+  // TODO
+  return Errno.success;
+}
+
+/**
+ * Open a file or directory. The returned file descriptor is not guaranteed to
+ * be the lowest-numbered file descriptor not currently open; it is randomized
+ * to prevent applications from depending on making assumptions about indexes,
+ * since this is error-prone in multi-threaded contexts. The returned file
+ * descriptor is guaranteed to be less than 2**31. Note: This is similar to
+ * `openat` in POSIX.
+ *
+ * @param fd
+ * @param dirflags Flags determining the method of how the path is resolved.
+ * @param path The relative path of the file or directory to open, relative to
+ * the path_open::fd directory.
+ * @param oflags The method by which to open the file.
+ * @param fs_rights_base The initial rights of the newly created file
+ * descriptor. The implementation is allowed to return a file descriptor with
+ * fewer rights than specified, if and only if those rights do not apply to the
+ * type of file being opened. The base rights are rights that will apply to
+ * operations using the file descriptor itself, while the inheriting rights are
+ * rights that apply to file descriptors derived from it.
+ * @param fs_rights_inheriting
+ * @param fdflags
+ *
+ * @returns `Result<fd, errno>` The file descriptor of the file that has been
+ * opened.
+ *
+ * ## Variant Layout
+ *
+ * - size: 8
+ * - align: 4
+ * - tag_size: 4
+ *
+ * ### Variant cases
+ *
+ * - ok: fd
+ * - err: errno
+ */
+export function path_open() {
+  // TODO
+  return Errno.badf;
 }
 
 /**
@@ -312,8 +427,7 @@ export function fd_fdstat_get(
   if (!fs) return Errno.badf;
 
   const memory = new DataView(_memory.buffer, result, Fdstat.size);
-  // TODO
-  Fdstat.fs_flags_set(memory, fs.fdflags);
+  Fdstat.fs_flags_set(memory, fs.fdflags); // TODO
 
   return Errno.success;
 }
@@ -345,7 +459,6 @@ export function fd_fdstat_set_flags(
   const fs = FS.get(fd);
   if (!fs) return Errno.badf;
 
-  // console.debug(`\t---- flags = ${Fdflags.toString(flags)}`);
   fs.fdflags = flags;
   return Errno.success;
 }
@@ -354,11 +467,16 @@ export function fd_fdstat_set_flags(
  * Return a description of the given preopened file descriptor.
  */
 export function fd_prestat_get(
-  _fd: Fd,
-  _result: Pointer<Prestat>,
+  fd: Fd,
+  result: Pointer<Prestat>,
 ): Errno {
-  // TODO
-  return Errno.badf;
+  const fs = FS.get(fd);
+  if (!fs) return Errno.badf;
+
+  const memory = new DataView(_memory.buffer, result, Prestat.size);
+  Prestat.fs_flags_set(memory, fs.fdflags); // TODO
+
+  return Errno.success;
 }
 
 /**
@@ -388,7 +506,7 @@ export type Env = {
 /**
  * @param memory The memory instance of the WebAssembly module.
  */
-export function _init(
+export default function (
   memory: WebAssembly.Memory,
   { args = [], env = { ENV: "TODO" } }: Env,
 ): void {
